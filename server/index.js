@@ -358,6 +358,433 @@ class LudoGame {
   }
 }
 
+class MonopolyGame {
+  constructor(gameId) {
+    this.gameId = gameId;
+    this.players = [];
+    this.maxPlayers = 6;
+    this.currentPlayerIndex = 0;
+    this.diceValue = [0, 0];
+    this.status = 'waiting';
+    this.type = 'monopoly';
+    this.board = this.initBoard();
+    this.tokens = ['car', 'hat', 'dog', 'ship', 'boot', 'thimble'];
+  }
+
+  initBoard() {
+    return {
+      properties: [
+        { id: 0, name: 'GO', type: 'go', price: 0 },
+        { id: 1, name: 'Mediterranean Ave', type: 'property', color: 'brown', price: 60, rent: [2, 10, 30, 90, 160, 250], owner: null, houses: 0 },
+        { id: 2, name: 'Community Chest', type: 'chest', price: 0 },
+        { id: 3, name: 'Baltic Ave', type: 'property', color: 'brown', price: 60, rent: [4, 20, 60, 180, 320, 450], owner: null, houses: 0 },
+        { id: 4, name: 'Income Tax', type: 'tax', price: 200 },
+        { id: 5, name: 'Reading Railroad', type: 'railroad', price: 200, owner: null },
+        { id: 6, name: 'Oriental Ave', type: 'property', color: 'lightblue', price: 100, rent: [6, 30, 90, 270, 400, 550], owner: null, houses: 0 },
+        { id: 7, name: 'Chance', type: 'chance', price: 0 },
+        { id: 8, name: 'Vermont Ave', type: 'property', color: 'lightblue', price: 100, rent: [6, 30, 90, 270, 400, 550], owner: null, houses: 0 },
+        { id: 9, name: 'Connecticut Ave', type: 'property', color: 'lightblue', price: 120, rent: [8, 40, 100, 300, 450, 600], owner: null, houses: 0 },
+        { id: 10, name: 'Jail', type: 'jail', price: 0 },
+        { id: 11, name: 'St. Charles Place', type: 'property', color: 'pink', price: 140, rent: [10, 50, 150, 450, 625, 750], owner: null, houses: 0 },
+        { id: 12, name: 'Electric Company', type: 'utility', price: 150, owner: null },
+        { id: 13, name: 'States Ave', type: 'property', color: 'pink', price: 140, rent: [10, 50, 150, 450, 625, 750], owner: null, houses: 0 },
+        { id: 14, name: 'Virginia Ave', type: 'property', color: 'pink', price: 160, rent: [12, 60, 180, 500, 700, 900], owner: null, houses: 0 },
+        { id: 15, name: 'Pennsylvania Railroad', type: 'railroad', price: 200, owner: null },
+        { id: 16, name: 'St. James Place', type: 'property', color: 'orange', price: 180, rent: [14, 70, 200, 550, 750, 950], owner: null, houses: 0 },
+        { id: 17, name: 'Community Chest', type: 'chest', price: 0 },
+        { id: 18, name: 'Tennessee Ave', type: 'property', color: 'orange', price: 180, rent: [14, 70, 200, 550, 750, 950], owner: null, houses: 0 },
+        { id: 19, name: 'New York Ave', type: 'property', color: 'orange', price: 200, rent: [16, 80, 220, 600, 800, 1000], owner: null, houses: 0 },
+        { id: 20, name: 'Free Parking', type: 'parking', price: 0 },
+        { id: 21, name: 'Kentucky Ave', type: 'property', color: 'red', price: 220, rent: [18, 90, 250, 700, 875, 1050], owner: null, houses: 0 },
+        { id: 22, name: 'Chance', type: 'chance', price: 0 },
+        { id: 23, name: 'Indiana Ave', type: 'property', color: 'red', price: 220, rent: [18, 90, 250, 700, 875, 1050], owner: null, houses: 0 },
+        { id: 24, name: 'Illinois Ave', type: 'property', color: 'red', price: 240, rent: [20, 100, 300, 750, 925, 1100], owner: null, houses: 0 },
+        { id: 25, name: 'B&O Railroad', type: 'railroad', price: 200, owner: null },
+        { id: 26, name: 'Atlantic Ave', type: 'property', color: 'yellow', price: 260, rent: [22, 110, 330, 800, 975, 1150], owner: null, houses: 0 },
+        { id: 27, name: 'Ventnor Ave', type: 'property', color: 'yellow', price: 260, rent: [22, 110, 330, 800, 975, 1150], owner: null, houses: 0 },
+        { id: 28, name: 'Water Works', type: 'utility', price: 150, owner: null },
+        { id: 29, name: 'Marvin Gardens', type: 'property', color: 'yellow', price: 280, rent: [24, 120, 360, 850, 1025, 1200], owner: null, houses: 0 },
+        { id: 30, name: 'Go To Jail', type: 'gotojail', price: 0 },
+        { id: 31, name: 'Pacific Ave', type: 'property', color: 'green', price: 300, rent: [26, 130, 390, 900, 1100, 1275], owner: null, houses: 0 },
+        { id: 32, name: 'North Carolina Ave', type: 'property', color: 'green', price: 300, rent: [26, 130, 390, 900, 1100, 1275], owner: null, houses: 0 },
+        { id: 33, name: 'Community Chest', type: 'chest', price: 0 },
+        { id: 34, name: 'Pennsylvania Ave', type: 'property', color: 'green', price: 320, rent: [28, 150, 450, 1000, 1200, 1400], owner: null, houses: 0 },
+        { id: 35, name: 'Short Line', type: 'railroad', price: 200, owner: null },
+        { id: 36, name: 'Chance', type: 'chance', price: 0 },
+        { id: 37, name: 'Park Place', type: 'property', color: 'darkblue', price: 350, rent: [35, 175, 500, 1100, 1300, 1500], owner: null, houses: 0 },
+        { id: 38, name: 'Luxury Tax', type: 'tax', price: 100 },
+        { id: 39, name: 'Boardwalk', type: 'property', color: 'darkblue', price: 400, rent: [50, 200, 600, 1400, 1700, 2000], owner: null, houses: 0 }
+      ]
+    };
+  }
+
+  addPlayer(player) {
+    if (this.players.length >= this.maxPlayers) return false;
+    const token = this.tokens[this.players.length];
+    this.players.push({ ...player, token, position: 0, money: 1500, properties: [], inJail: false, jailTurns: 0 });
+    return true;
+  }
+
+  removePlayer(socketId) {
+    const index = this.players.findIndex(p => p.socketId === socketId);
+    if (index !== -1) {
+      const player = this.players[index];
+      this.board.properties.forEach(prop => {
+        if (prop.owner === player.id) {
+          prop.owner = null;
+          prop.houses = 0;
+        }
+      });
+      this.players.splice(index, 1);
+      if (this.currentPlayerIndex >= this.players.length) {
+        this.currentPlayerIndex = 0;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  startGame() {
+    if (this.players.length >= 2) {
+      this.status = 'playing';
+      this.currentPlayerIndex = 0;
+      return true;
+    }
+    return false;
+  }
+
+  rollDice() {
+    this.diceValue = [Math.floor(Math.random() * 6) + 1, Math.floor(Math.random() * 6) + 1];
+    return this.diceValue;
+  }
+
+  movePlayer(playerIndex) {
+    if (playerIndex !== this.currentPlayerIndex) return { success: false };
+    const player = this.players[playerIndex];
+    const totalMove = this.diceValue[0] + this.diceValue[1];
+    const oldPosition = player.position;
+    player.position = (player.position + totalMove) % 40;
+    
+    if (player.position < oldPosition) {
+      player.money += 200;
+    }
+    
+    const landedOn = this.board.properties[player.position];
+    let action = null;
+
+    if (landedOn.type === 'property' || landedOn.type === 'railroad' || landedOn.type === 'utility') {
+      if (landedOn.owner === null) {
+        action = { type: 'can_buy', property: landedOn };
+      } else if (landedOn.owner !== player.id) {
+        const rent = this.calculateRent(landedOn);
+        player.money -= rent;
+        const owner = this.players.find(p => p.id === landedOn.owner);
+        if (owner) owner.money += rent;
+        action = { type: 'paid_rent', property: landedOn, rent };
+      }
+    } else if (landedOn.type === 'tax') {
+      player.money -= landedOn.price;
+      action = { type: 'paid_tax', amount: landedOn.price };
+    } else if (landedOn.type === 'gotojail') {
+      player.position = 10;
+      player.inJail = true;
+      action = { type: 'went_to_jail' };
+    }
+
+    if (this.diceValue[0] !== this.diceValue[1]) {
+      this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
+    }
+
+    if (player.money < 0) {
+      this.handleBankruptcy(player);
+    }
+
+    this.diceValue = [0, 0];
+    return { success: true, player, landedOn, action };
+  }
+
+  calculateRent(property) {
+    if (property.type === 'railroad') {
+      const railroadsOwned = this.board.properties.filter(p => p.type === 'railroad' && p.owner === property.owner).length;
+      return 25 * Math.pow(2, railroadsOwned - 1);
+    }
+    if (property.type === 'utility') {
+      const utilitiesOwned = this.board.properties.filter(p => p.type === 'utility' && p.owner === property.owner).length;
+      const diceTotal = this.diceValue[0] + this.diceValue[1];
+      return utilitiesOwned === 1 ? diceTotal * 4 : diceTotal * 10;
+    }
+    return property.rent[property.houses];
+  }
+
+  buyProperty(playerIndex, propertyId) {
+    const player = this.players[playerIndex];
+    const property = this.board.properties[propertyId];
+    if (!property || property.owner !== null || player.money < property.price) {
+      return { success: false };
+    }
+    player.money -= property.price;
+    property.owner = player.id;
+    player.properties.push(propertyId);
+    return { success: true, property };
+  }
+
+  handleBankruptcy(player) {
+    player.properties.forEach(propId => {
+      const prop = this.board.properties[propId];
+      if (prop) {
+        prop.owner = null;
+        prop.houses = 0;
+      }
+    });
+    player.properties = [];
+    player.bankrupt = true;
+    
+    const activePlayers = this.players.filter(p => !p.bankrupt);
+    if (activePlayers.length === 1) {
+      this.status = 'finished';
+      return activePlayers[0];
+    }
+    return null;
+  }
+
+  getState() {
+    return {
+      gameId: this.gameId,
+      type: this.type,
+      status: this.status,
+      players: this.players.map(p => ({
+        id: p.id,
+        username: p.username,
+        token: p.token,
+        position: p.position,
+        money: p.money,
+        properties: p.properties,
+        inJail: p.inJail,
+        bankrupt: p.bankrupt,
+        avatar: p.avatar
+      })),
+      board: this.board,
+      currentPlayerIndex: this.currentPlayerIndex,
+      diceValue: this.diceValue,
+      maxPlayers: this.maxPlayers
+    };
+  }
+}
+
+class UnoGame {
+  constructor(gameId) {
+    this.gameId = gameId;
+    this.players = [];
+    this.maxPlayers = 10;
+    this.currentPlayerIndex = 0;
+    this.direction = 1;
+    this.status = 'waiting';
+    this.type = 'uno';
+    this.deck = [];
+    this.discardPile = [];
+    this.currentColor = null;
+  }
+
+  initDeck() {
+    const colors = ['red', 'blue', 'green', 'yellow'];
+    const deck = [];
+    
+    colors.forEach(color => {
+      deck.push({ color, value: '0' });
+      for (let i = 1; i <= 9; i++) {
+        deck.push({ color, value: String(i) });
+        deck.push({ color, value: String(i) });
+      }
+      ['skip', 'reverse', 'draw2'].forEach(special => {
+        deck.push({ color, value: special });
+        deck.push({ color, value: special });
+      });
+    });
+    
+    for (let i = 0; i < 4; i++) {
+      deck.push({ color: 'wild', value: 'wild' });
+      deck.push({ color: 'wild', value: 'wild4' });
+    }
+    
+    return this.shuffle(deck);
+  }
+
+  shuffle(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+  }
+
+  addPlayer(player) {
+    if (this.players.length >= this.maxPlayers) return false;
+    this.players.push({ ...player, hand: [], uno: false });
+    return true;
+  }
+
+  removePlayer(socketId) {
+    const index = this.players.findIndex(p => p.socketId === socketId);
+    if (index !== -1) {
+      const player = this.players[index];
+      this.deck.push(...player.hand);
+      this.players.splice(index, 1);
+      if (this.currentPlayerIndex >= this.players.length) {
+        this.currentPlayerIndex = 0;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  startGame() {
+    if (this.players.length >= 2) {
+      this.deck = this.initDeck();
+      this.players.forEach(player => {
+        player.hand = this.deck.splice(0, 7);
+      });
+      
+      let startCard = this.deck.pop();
+      while (startCard.color === 'wild') {
+        this.deck.unshift(startCard);
+        this.deck = this.shuffle(this.deck);
+        startCard = this.deck.pop();
+      }
+      this.discardPile = [startCard];
+      this.currentColor = startCard.color;
+      
+      this.status = 'playing';
+      this.currentPlayerIndex = 0;
+      return true;
+    }
+    return false;
+  }
+
+  canPlayCard(card) {
+    const topCard = this.discardPile[this.discardPile.length - 1];
+    if (card.color === 'wild') return true;
+    if (card.color === this.currentColor) return true;
+    if (card.value === topCard.value) return true;
+    return false;
+  }
+
+  playCard(playerIndex, cardIndex, chosenColor = null) {
+    if (playerIndex !== this.currentPlayerIndex) return { success: false };
+    
+    const player = this.players[playerIndex];
+    const card = player.hand[cardIndex];
+    if (!card || !this.canPlayCard(card)) return { success: false };
+    
+    player.hand.splice(cardIndex, 1);
+    this.discardPile.push(card);
+    
+    if (card.color === 'wild') {
+      this.currentColor = chosenColor || 'red';
+    } else {
+      this.currentColor = card.color;
+    }
+    
+    let nextPlayerIndex = this.currentPlayerIndex;
+    let drawCards = 0;
+    let skipNext = false;
+
+    if (card.value === 'reverse') {
+      this.direction *= -1;
+      if (this.players.length === 2) skipNext = true;
+    } else if (card.value === 'skip') {
+      skipNext = true;
+    } else if (card.value === 'draw2') {
+      skipNext = true;
+      drawCards = 2;
+    } else if (card.value === 'wild4') {
+      skipNext = true;
+      drawCards = 4;
+    }
+
+    nextPlayerIndex = (this.currentPlayerIndex + this.direction + this.players.length) % this.players.length;
+    
+    if (drawCards > 0) {
+      const targetPlayer = this.players[nextPlayerIndex];
+      for (let i = 0; i < drawCards; i++) {
+        if (this.deck.length === 0) this.reshuffleDeck();
+        if (this.deck.length > 0) targetPlayer.hand.push(this.deck.pop());
+      }
+    }
+
+    if (skipNext) {
+      nextPlayerIndex = (nextPlayerIndex + this.direction + this.players.length) % this.players.length;
+    }
+
+    this.currentPlayerIndex = nextPlayerIndex;
+
+    if (player.hand.length === 0) {
+      this.status = 'finished';
+      return { success: true, winner: player, card };
+    }
+
+    return { success: true, card };
+  }
+
+  drawCard(playerIndex) {
+    if (playerIndex !== this.currentPlayerIndex) return { success: false };
+    
+    const player = this.players[playerIndex];
+    if (this.deck.length === 0) this.reshuffleDeck();
+    if (this.deck.length === 0) return { success: false };
+    
+    const card = this.deck.pop();
+    player.hand.push(card);
+    
+    if (!this.canPlayCard(card)) {
+      this.currentPlayerIndex = (this.currentPlayerIndex + this.direction + this.players.length) % this.players.length;
+    }
+    
+    return { success: true, card, canPlay: this.canPlayCard(card) };
+  }
+
+  reshuffleDeck() {
+    if (this.discardPile.length <= 1) return;
+    const topCard = this.discardPile.pop();
+    this.deck = this.shuffle(this.discardPile);
+    this.discardPile = [topCard];
+  }
+
+  callUno(playerIndex) {
+    const player = this.players[playerIndex];
+    if (player.hand.length === 1) {
+      player.uno = true;
+      return { success: true };
+    }
+    return { success: false };
+  }
+
+  getState() {
+    return {
+      gameId: this.gameId,
+      type: this.type,
+      status: this.status,
+      players: this.players.map(p => ({
+        id: p.id,
+        username: p.username,
+        handCount: p.hand.length,
+        uno: p.uno,
+        avatar: p.avatar
+      })),
+      currentPlayerIndex: this.currentPlayerIndex,
+      direction: this.direction,
+      topCard: this.discardPile[this.discardPile.length - 1],
+      currentColor: this.currentColor,
+      deckCount: this.deck.length,
+      maxPlayers: this.maxPlayers
+    };
+  }
+
+  getPlayerHand(playerId) {
+    const player = this.players.find(p => p.id === playerId);
+    return player ? player.hand : [];
+  }
+}
+
 io.on('connection', (socket) => {
   console.log('Player connected:', socket.id);
   let currentUser = null;
@@ -390,6 +817,10 @@ io.on('connection', (socket) => {
 
     if (gameType === 'ludo') {
       game = new LudoGame(gameId);
+    } else if (gameType === 'monopoly') {
+      game = new MonopolyGame(gameId);
+    } else if (gameType === 'uno') {
+      game = new UnoGame(gameId);
     } else {
       socket.emit('error', 'Invalid game type');
       return;
@@ -432,7 +863,7 @@ io.on('connection', (socket) => {
     io.emit('games_updated', getActiveGamesList());
   });
 
-  socket.on('quick_match', (gameType) => {
+  socket.on('quick_match', (gameType, theme) => {
     if (!currentUser) {
       socket.emit('error', 'Not authenticated');
       return;
@@ -443,7 +874,11 @@ io.on('connection', (socket) => {
         game.addPlayer(currentUser);
         currentGameId = gameId;
         socket.join(gameId);
-        io.to(gameId).emit('game_state', game.getState());
+        const state = game.getState();
+        if (game.type === 'uno') {
+          state.hand = game.getPlayerHand(currentUser.id);
+        }
+        io.to(gameId).emit('game_state', state);
         io.emit('games_updated', getActiveGamesList());
         return;
       }
@@ -453,6 +888,11 @@ io.on('connection', (socket) => {
     let game;
     if (gameType === 'ludo') {
       game = new LudoGame(gameId);
+      if (theme) game.theme = theme;
+    } else if (gameType === 'monopoly') {
+      game = new MonopolyGame(gameId);
+    } else if (gameType === 'uno') {
+      game = new UnoGame(gameId);
     } else {
       socket.emit('error', 'Invalid game type');
       return;
@@ -542,6 +982,123 @@ io.on('connection', (socket) => {
       }
     } else {
       socket.emit('invalid_move');
+    }
+  });
+
+  socket.on('monopoly_roll', () => {
+    if (!currentGameId) return;
+    const game = activeGames.get(currentGameId);
+    if (!game || game.type !== 'monopoly' || game.status !== 'playing') return;
+
+    const playerIndex = game.players.findIndex(p => p.socketId === socket.id);
+    if (playerIndex !== game.currentPlayerIndex) {
+      socket.emit('error', 'Not your turn');
+      return;
+    }
+
+    const diceValue = game.rollDice();
+    const result = game.movePlayer(playerIndex);
+
+    io.to(currentGameId).emit('monopoly_moved', {
+      diceValue,
+      result,
+      gameState: game.getState()
+    });
+
+    if (game.status === 'finished') {
+      const winner = game.players.find(p => !p.bankrupt);
+      io.to(currentGameId).emit('game_over', { winner, gameState: game.getState() });
+      updatePlayerStats(winner.id, true);
+      game.players.forEach(p => {
+        if (p.id !== winner.id) updatePlayerStats(p.id, false);
+      });
+      saveGameHistory(currentGameId, game, winner.id);
+    }
+  });
+
+  socket.on('monopoly_buy', (propertyId) => {
+    if (!currentGameId) return;
+    const game = activeGames.get(currentGameId);
+    if (!game || game.type !== 'monopoly' || game.status !== 'playing') return;
+
+    const playerIndex = game.players.findIndex(p => p.socketId === socket.id);
+    const result = game.buyProperty(playerIndex, propertyId);
+
+    if (result.success) {
+      io.to(currentGameId).emit('monopoly_bought', {
+        playerIndex,
+        property: result.property,
+        gameState: game.getState()
+      });
+    } else {
+      socket.emit('error', 'Cannot buy property');
+    }
+  });
+
+  socket.on('uno_play_card', (cardIndex, chosenColor) => {
+    if (!currentGameId) return;
+    const game = activeGames.get(currentGameId);
+    if (!game || game.type !== 'uno' || game.status !== 'playing') return;
+
+    const playerIndex = game.players.findIndex(p => p.socketId === socket.id);
+    const result = game.playCard(playerIndex, cardIndex, chosenColor);
+
+    if (result.success) {
+      const state = game.getState();
+      io.to(currentGameId).emit('uno_card_played', {
+        playerIndex,
+        card: result.card,
+        gameState: state
+      });
+
+      game.players.forEach(p => {
+        const playerSocket = io.sockets.sockets.get(p.socketId);
+        if (playerSocket) {
+          playerSocket.emit('uno_hand', game.getPlayerHand(p.id));
+        }
+      });
+
+      if (result.winner) {
+        io.to(currentGameId).emit('game_over', { winner: result.winner, gameState: state });
+        updatePlayerStats(result.winner.id, true);
+        game.players.forEach(p => {
+          if (p.id !== result.winner.id) updatePlayerStats(p.id, false);
+        });
+        saveGameHistory(currentGameId, game, result.winner.id);
+      }
+    } else {
+      socket.emit('error', 'Invalid card play');
+    }
+  });
+
+  socket.on('uno_draw_card', () => {
+    if (!currentGameId) return;
+    const game = activeGames.get(currentGameId);
+    if (!game || game.type !== 'uno' || game.status !== 'playing') return;
+
+    const playerIndex = game.players.findIndex(p => p.socketId === socket.id);
+    const result = game.drawCard(playerIndex);
+
+    if (result.success) {
+      socket.emit('uno_drew_card', { card: result.card, canPlay: result.canPlay });
+      socket.emit('uno_hand', game.getPlayerHand(currentUser.id));
+      io.to(currentGameId).emit('uno_player_drew', {
+        playerIndex,
+        gameState: game.getState()
+      });
+    }
+  });
+
+  socket.on('uno_call_uno', () => {
+    if (!currentGameId) return;
+    const game = activeGames.get(currentGameId);
+    if (!game || game.type !== 'uno') return;
+
+    const playerIndex = game.players.findIndex(p => p.socketId === socket.id);
+    const result = game.callUno(playerIndex);
+
+    if (result.success) {
+      io.to(currentGameId).emit('uno_called', { playerIndex, gameState: game.getState() });
     }
   });
 

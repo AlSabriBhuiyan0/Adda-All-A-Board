@@ -3,6 +3,26 @@ const socket = io();
 let currentUser = null;
 let currentGame = null;
 let authToken = localStorage.getItem('gameToken');
+let selectedTheme = localStorage.getItem('gameTheme') || 'classic';
+
+function setTheme(theme) {
+  selectedTheme = theme;
+  localStorage.setItem('gameTheme', theme);
+  document.body.className = '';
+  if (theme !== 'classic') {
+    document.body.classList.add(`theme-${theme}`);
+  }
+}
+
+document.getElementById('ludo-theme')?.addEventListener('change', (e) => {
+  setTheme(e.target.value);
+});
+
+if (selectedTheme !== 'classic') {
+  setTheme(selectedTheme);
+  const themeSelect = document.getElementById('ludo-theme');
+  if (themeSelect) themeSelect.value = selectedTheme;
+}
 
 const screens = {
   auth: document.getElementById('auth-screen'),
@@ -128,7 +148,8 @@ async function loadLeaderboard() {
 document.querySelectorAll('.quick-match').forEach(btn => {
   btn.addEventListener('click', () => {
     const gameType = btn.dataset.game;
-    socket.emit('quick_match', gameType);
+    const theme = gameType === 'ludo' ? selectedTheme : 'classic';
+    socket.emit('quick_match', gameType, theme);
   });
 });
 
@@ -188,16 +209,75 @@ socket.on('game_state', (gameState) => {
     updateWaitingRoom(gameState);
     showScreen('waiting');
   } else if (gameState.status === 'playing') {
+    showGameContainer(gameState.type);
     updateGameBoard(gameState);
     showScreen('game');
   }
 });
 
+socket.on('uno_hand', (hand) => {
+  updateUnoHand(hand);
+});
+
+socket.on('monopoly_moved', (data) => {
+  currentGame = data.gameState;
+  updateMonopolyBoard(data.gameState);
+  
+  const dice = document.querySelectorAll('#monopoly-dice .die');
+  dice[0].textContent = data.diceValue[0];
+  dice[1].textContent = data.diceValue[1];
+  
+  if (data.result.action) {
+    showMonopolyAction(data.result.action);
+  }
+});
+
+socket.on('monopoly_bought', (data) => {
+  currentGame = data.gameState;
+  updateMonopolyBoard(data.gameState);
+  document.getElementById('monopoly-buy-btn').style.display = 'none';
+  document.getElementById('monopoly-pass-btn').style.display = 'none';
+});
+
+socket.on('uno_card_played', (data) => {
+  currentGame = data.gameState;
+  updateUnoTable(data.gameState);
+});
+
+socket.on('uno_player_drew', (data) => {
+  currentGame = data.gameState;
+  updateUnoTable(data.gameState);
+});
+
+socket.on('uno_called', (data) => {
+  currentGame = data.gameState;
+  const player = data.gameState.players[data.playerIndex];
+  alert(`${player.username} called UNO!`);
+});
+
 socket.on('game_started', (gameState) => {
   currentGame = gameState;
   showScreen('game');
+  showGameContainer(gameState.type);
   updateGameBoard(gameState);
 });
+
+function showGameContainer(gameType) {
+  document.getElementById('ludo-game').style.display = 'none';
+  document.getElementById('monopoly-game').style.display = 'none';
+  document.getElementById('uno-game').style.display = 'none';
+  
+  if (gameType === 'ludo') {
+    document.getElementById('ludo-game').style.display = 'flex';
+    document.getElementById('game-title').textContent = 'Ludo King';
+  } else if (gameType === 'monopoly') {
+    document.getElementById('monopoly-game').style.display = 'flex';
+    document.getElementById('game-title').textContent = 'Monopoly';
+  } else if (gameType === 'uno') {
+    document.getElementById('uno-game').style.display = 'flex';
+    document.getElementById('game-title').textContent = 'UNO';
+  }
+}
 
 socket.on('dice_rolled', (data) => {
   const dice = document.getElementById('dice');
@@ -292,6 +372,16 @@ function updateWaitingRoom(gameState) {
 }
 
 function updateGameBoard(gameState) {
+  if (gameState.type === 'ludo') {
+    updateLudoBoard(gameState);
+  } else if (gameState.type === 'monopoly') {
+    updateMonopolyBoard(gameState);
+  } else if (gameState.type === 'uno') {
+    updateUnoTable(gameState);
+  }
+}
+
+function updateLudoBoard(gameState) {
   const playersContainer = document.getElementById('game-players');
   playersContainer.innerHTML = gameState.players.map((player, index) => `
     <div class="player-status ${index === gameState.currentPlayerIndex ? 'current' : ''}">
@@ -411,7 +501,11 @@ window.joinGame = function(gameId) {
 
 document.getElementById('play-again-btn').addEventListener('click', () => {
   document.getElementById('game-over-modal').classList.remove('active');
-  socket.emit('quick_match', 'ludo');
+  if (currentGame) {
+    socket.emit('quick_match', currentGame.type);
+  } else {
+    socket.emit('quick_match', 'ludo');
+  }
 });
 
 document.getElementById('back-to-lobby-btn').addEventListener('click', () => {
@@ -419,6 +513,185 @@ document.getElementById('back-to-lobby-btn').addEventListener('click', () => {
   showScreen('lobby');
   loadLeaderboard();
 });
+
+document.getElementById('monopoly-roll-btn')?.addEventListener('click', () => {
+  socket.emit('monopoly_roll');
+});
+
+document.getElementById('monopoly-buy-btn')?.addEventListener('click', () => {
+  if (currentGame && pendingProperty) {
+    socket.emit('monopoly_buy', pendingProperty.id);
+    pendingProperty = null;
+  }
+});
+
+document.getElementById('monopoly-pass-btn')?.addEventListener('click', () => {
+  pendingProperty = null;
+  document.getElementById('monopoly-buy-btn').style.display = 'none';
+  document.getElementById('monopoly-pass-btn').style.display = 'none';
+  document.getElementById('monopoly-action').innerHTML = '';
+});
+
+document.getElementById('uno-draw-btn')?.addEventListener('click', () => {
+  socket.emit('uno_draw_card');
+});
+
+document.getElementById('uno-call-btn')?.addEventListener('click', () => {
+  socket.emit('uno_call_uno');
+});
+
+document.querySelectorAll('.color-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const color = btn.dataset.color;
+    if (pendingCardIndex !== null) {
+      socket.emit('uno_play_card', pendingCardIndex, color);
+      pendingCardIndex = null;
+      document.getElementById('uno-color-picker').style.display = 'none';
+    }
+  });
+});
+
+let pendingProperty = null;
+let pendingCardIndex = null;
+
+function updateMonopolyBoard(gameState) {
+  const playersContainer = document.getElementById('monopoly-players');
+  playersContainer.innerHTML = gameState.players.map((player, index) => `
+    <div class="monopoly-player ${index === gameState.currentPlayerIndex ? 'current' : ''} ${player.bankrupt ? 'bankrupt' : ''}">
+      <div class="monopoly-token" style="background: ${getTokenColor(player.token)}"></div>
+      <div>
+        <div>${player.username}</div>
+        <div class="money">$${player.money}</div>
+      </div>
+      <div>Pos: ${player.position}</div>
+    </div>
+  `).join('');
+
+  const myPlayer = gameState.players.find(p => p.id === currentUser?.id);
+  if (myPlayer) {
+    document.getElementById('monopoly-player-info').innerHTML = `
+      <div>Your money: <span class="money">$${myPlayer.money}</span></div>
+      <div>Properties: ${myPlayer.properties.length}</div>
+    `;
+  }
+
+  const isMyTurn = myPlayer && gameState.currentPlayerIndex === gameState.players.findIndex(p => p.id === myPlayer.id);
+  document.getElementById('monopoly-roll-btn').disabled = !isMyTurn;
+  
+  const turnIndicator = document.getElementById('turn-indicator');
+  if (isMyTurn) {
+    turnIndicator.textContent = 'Your Turn';
+    turnIndicator.classList.remove('waiting');
+  } else {
+    const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+    turnIndicator.textContent = `${currentPlayer?.username}'s Turn`;
+    turnIndicator.classList.add('waiting');
+  }
+}
+
+function showMonopolyAction(action) {
+  const actionDiv = document.getElementById('monopoly-action');
+  
+  if (action.type === 'can_buy') {
+    actionDiv.innerHTML = `
+      <p><strong>${action.property.name}</strong></p>
+      <p>Price: $${action.property.price}</p>
+      <p>Would you like to buy this property?</p>
+    `;
+    pendingProperty = action.property;
+    document.getElementById('monopoly-buy-btn').style.display = 'inline-block';
+    document.getElementById('monopoly-pass-btn').style.display = 'inline-block';
+  } else if (action.type === 'paid_rent') {
+    actionDiv.innerHTML = `<p>Paid $${action.rent} rent for ${action.property.name}</p>`;
+  } else if (action.type === 'paid_tax') {
+    actionDiv.innerHTML = `<p>Paid $${action.amount} in taxes</p>`;
+  } else if (action.type === 'went_to_jail') {
+    actionDiv.innerHTML = `<p>Go to Jail!</p>`;
+  }
+}
+
+function getTokenColor(token) {
+  const colors = {
+    car: '#E74C3C',
+    hat: '#3498DB',
+    dog: '#27AE60',
+    ship: '#9B59B6',
+    boot: '#F39C12',
+    thimble: '#1ABC9C'
+  };
+  return colors[token] || '#888';
+}
+
+function updateUnoTable(gameState) {
+  const opponentsContainer = document.getElementById('uno-opponents');
+  opponentsContainer.innerHTML = gameState.players
+    .filter(p => p.id !== currentUser?.id)
+    .map((player, index) => `
+      <div class="uno-opponent ${gameState.currentPlayerIndex === gameState.players.findIndex(p2 => p2.id === player.id) ? 'current' : ''}">
+        <div>${player.username}</div>
+        <div class="card-count">${player.handCount} cards</div>
+        ${player.uno ? '<div style="color: #F1C40F;">UNO!</div>' : ''}
+      </div>
+    `).join('');
+
+  const discardContainer = document.getElementById('uno-discard');
+  if (gameState.topCard) {
+    discardContainer.innerHTML = `
+      <div class="uno-card ${gameState.topCard.color}">
+        ${getCardDisplay(gameState.topCard)}
+      </div>
+    `;
+  }
+
+  const colorIndicator = document.getElementById('uno-current-color');
+  colorIndicator.className = `uno-color-indicator ${gameState.currentColor}`;
+
+  document.getElementById('deck-count').textContent = gameState.deckCount;
+
+  const myPlayer = gameState.players.find(p => p.id === currentUser?.id);
+  const isMyTurn = myPlayer && gameState.currentPlayerIndex === gameState.players.findIndex(p => p.id === myPlayer.id);
+  
+  document.getElementById('uno-draw-btn').disabled = !isMyTurn;
+  
+  const turnIndicator = document.getElementById('turn-indicator');
+  if (isMyTurn) {
+    turnIndicator.textContent = 'Your Turn';
+    turnIndicator.classList.remove('waiting');
+  } else {
+    const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+    turnIndicator.textContent = `${currentPlayer?.username}'s Turn`;
+    turnIndicator.classList.add('waiting');
+  }
+}
+
+function updateUnoHand(hand) {
+  const handContainer = document.getElementById('uno-hand');
+  handContainer.innerHTML = hand.map((card, index) => `
+    <div class="uno-card ${card.color}" data-index="${index}" onclick="playUnoCard(${index}, '${card.color}', '${card.value}')">
+      ${getCardDisplay(card)}
+    </div>
+  `).join('');
+}
+
+function getCardDisplay(card) {
+  const specialCards = {
+    'skip': '⊘',
+    'reverse': '⇄',
+    'draw2': '+2',
+    'wild': 'W',
+    'wild4': '+4'
+  };
+  return specialCards[card.value] || card.value;
+}
+
+window.playUnoCard = function(index, color, value) {
+  if (color === 'wild') {
+    pendingCardIndex = index;
+    document.getElementById('uno-color-picker').style.display = 'flex';
+  } else {
+    socket.emit('uno_play_card', index, null);
+  }
+};
 
 if (authToken) {
   socket.emit('authenticate', authToken);

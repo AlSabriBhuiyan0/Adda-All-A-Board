@@ -68,23 +68,32 @@
             <div class="game-icon ludo-icon">
               <div class="ludo-board-mini"></div>
             </div>
-            <h3>Ludo</h3>
+            <h3>Ludo King</h3>
             <p>2-4 Players</p>
+            <div class="theme-selector">
+              <label>Theme:</label>
+              <select id="ludo-theme">
+                <option value="classic">Classic</option>
+                <option value="candy">Candy</option>
+                <option value="pirate">Pirate</option>
+                <option value="christmas">Christmas</option>
+              </select>
+            </div>
             <button class="btn primary quick-match" data-game="ludo">Quick Play</button>
           </div>
 
-          <div class="game-card disabled">
+          <div class="game-card" data-game="monopoly">
             <div class="game-icon monopoly-icon">$</div>
             <h3>Monopoly</h3>
-            <p>Coming Soon</p>
-            <button class="btn disabled">Coming Soon</button>
+            <p>2-6 Players</p>
+            <button class="btn primary quick-match" data-game="monopoly">Quick Play</button>
           </div>
 
-          <div class="game-card disabled">
+          <div class="game-card" data-game="uno">
             <div class="game-icon uno-icon">UNO</div>
             <h3>UNO</h3>
-            <p>Coming Soon</p>
-            <button class="btn disabled">Coming Soon</button>
+            <p>2-10 Players</p>
+            <button class="btn primary quick-match" data-game="uno">Quick Play</button>
           </div>
         </div>
 
@@ -130,7 +139,7 @@
         <button id="exit-game-btn" class="btn small">Exit</button>
       </div>
 
-      <div id="ludo-game" class="game-container">
+      <div id="ludo-game" class="game-container" style="display: none;">
         <div class="ludo-board">
           <div class="board-center">
             <div class="home-triangle red"></div>
@@ -181,6 +190,53 @@
           <div id="piece-selection" class="piece-selection" style="display: none;">
             <p>Select a piece to move:</p>
             <div class="moveable-pieces"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="monopoly-game" class="game-container" style="display: none;">
+        <div class="monopoly-board">
+          <div class="monopoly-center">
+            <h2>MONOPOLY</h2>
+            <div id="monopoly-dice" class="monopoly-dice">
+              <span class="die">?</span>
+              <span class="die">?</span>
+            </div>
+            <button id="monopoly-roll-btn" class="btn primary">Roll Dice</button>
+          </div>
+          <div id="monopoly-properties" class="monopoly-properties"></div>
+          <div id="monopoly-players" class="monopoly-players"></div>
+        </div>
+        <div class="monopoly-controls">
+          <div id="monopoly-player-info" class="player-money-info"></div>
+          <div id="monopoly-action" class="monopoly-action"></div>
+          <button id="monopoly-buy-btn" class="btn primary" style="display: none;">Buy Property</button>
+          <button id="monopoly-pass-btn" class="btn secondary" style="display: none;">Pass</button>
+        </div>
+      </div>
+
+      <div id="uno-game" class="game-container" style="display: none;">
+        <div class="uno-table">
+          <div id="uno-opponents" class="uno-opponents"></div>
+          <div class="uno-center">
+            <div id="uno-deck" class="uno-deck">
+              <div class="card-back">UNO</div>
+              <span id="deck-count">0</span>
+            </div>
+            <div id="uno-discard" class="uno-discard"></div>
+            <div id="uno-current-color" class="uno-color-indicator"></div>
+          </div>
+          <div id="uno-hand" class="uno-hand"></div>
+        </div>
+        <div class="uno-controls">
+          <button id="uno-draw-btn" class="btn primary">Draw Card</button>
+          <button id="uno-call-btn" class="btn warning">UNO!</button>
+          <div id="uno-color-picker" class="color-picker" style="display: none;">
+            <p>Choose a color:</p>
+            <button class="color-btn red" data-color="red"></button>
+            <button class="color-btn blue" data-color="blue"></button>
+            <button class="color-btn green" data-color="green"></button>
+            <button class="color-btn yellow" data-color="yellow"></button>
           </div>
         </div>
       </div>
