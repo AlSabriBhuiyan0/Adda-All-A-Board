@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>GameHub - Multi-Game App</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <div id="auth-screen" class="screen active">
+      <div class="container">
+        <div class="logo">
+          <h1>GameHub</h1>
+          <p>Play. Connect. Win.</p>
+        </div>
+        
+        <div class="auth-tabs">
+          <button class="tab-btn active" data-tab="login">Login</button>
+          <button class="tab-btn" data-tab="register">Register</button>
+        </div>
+
+        <form id="login-form" class="auth-form active">
+          <div class="input-group">
+            <input type="email" id="login-email" placeholder="Email" required>
+          </div>
+          <div class="input-group">
+            <input type="password" id="login-password" placeholder="Password" required>
+          </div>
+          <button type="submit" class="btn primary">Login</button>
+        </form>
+
+        <form id="register-form" class="auth-form">
+          <div class="input-group">
+            <input type="text" id="register-username" placeholder="Username" required>
+          </div>
+          <div class="input-group">
+            <input type="email" id="register-email" placeholder="Email" required>
+          </div>
+          <div class="input-group">
+            <input type="password" id="register-password" placeholder="Password" required>
+          </div>
+          <button type="submit" class="btn primary">Create Account</button>
+        </form>
+
+        <div id="auth-error" class="error-msg"></div>
+      </div>
+    </div>
+
+    <div id="lobby-screen" class="screen">
+      <header class="lobby-header">
+        <div class="user-info">
+          <div class="avatar" id="user-avatar">U</div>
+          <div class="user-details">
+            <span id="username">Player</span>
+            <span class="coins"><span id="user-coins">0</span> coins</span>
+          </div>
+        </div>
+        <button id="logout-btn" class="btn small">Logout</button>
+      </header>
+
+      <div class="lobby-content">
+        <h2>Choose a Game</h2>
+        
+        <div class="games-grid">
+          <div class="game-card" data-game="ludo">
+            <div class="game-icon ludo-icon">
+              <div class="ludo-board-mini"></div>
+            </div>
+            <h3>Ludo</h3>
+            <p>2-4 Players</p>
+            <button class="btn primary quick-match" data-game="ludo">Quick Play</button>
+          </div>
+
+          <div class="game-card disabled">
+            <div class="game-icon monopoly-icon">$</div>
+            <h3>Monopoly</h3>
+            <p>Coming Soon</p>
+            <button class="btn disabled">Coming Soon</button>
+          </div>
+
+          <div class="game-card disabled">
+            <div class="game-icon uno-icon">UNO</div>
+            <h3>UNO</h3>
+            <p>Coming Soon</p>
+            <button class="btn disabled">Coming Soon</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>Active Games</h3>
+          <div id="active-games" class="games-list">
+            <p class="empty-msg">No active games. Create one!</p>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>Leaderboard</h3>
+          <div id="leaderboard" class="leaderboard">
+            <div class="loading">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="waiting-room" class="screen">
+      <div class="waiting-container">
+        <h2>Waiting Room</h2>
+        <p id="game-type-display">Ludo</p>
+        
+        <div id="players-list" class="players-grid">
+        </div>
+        
+        <div class="waiting-actions">
+          <button id="start-game-btn" class="btn primary" style="display: none;">Start Game</button>
+          <button id="leave-room-btn" class="btn secondary">Leave Room</button>
+        </div>
+        
+        <p class="waiting-msg">Waiting for players...</p>
+      </div>
+    </div>
+
+    <div id="game-screen" class="screen">
+      <div class="game-header">
+        <div class="game-info">
+          <span id="game-title">Ludo</span>
+          <span id="turn-indicator">Your Turn</span>
+        </div>
+        <button id="exit-game-btn" class="btn small">Exit</button>
+      </div>
+
+      <div id="ludo-game" class="game-container">
+        <div class="ludo-board">
+          <div class="board-center">
+            <div class="home-triangle red"></div>
+            <div class="home-triangle blue"></div>
+            <div class="home-triangle green"></div>
+            <div class="home-triangle yellow"></div>
+          </div>
+          
+          <div class="corner red-home">
+            <div class="piece-slot" data-color="red" data-index="0"></div>
+            <div class="piece-slot" data-color="red" data-index="1"></div>
+            <div class="piece-slot" data-color="red" data-index="2"></div>
+            <div class="piece-slot" data-color="red" data-index="3"></div>
+          </div>
+          
+          <div class="corner blue-home">
+            <div class="piece-slot" data-color="blue" data-index="0"></div>
+            <div class="piece-slot" data-color="blue" data-index="1"></div>
+            <div class="piece-slot" data-color="blue" data-index="2"></div>
+            <div class="piece-slot" data-color="blue" data-index="3"></div>
+          </div>
+          
+          <div class="corner green-home">
+            <div class="piece-slot" data-color="green" data-index="0"></div>
+            <div class="piece-slot" data-color="green" data-index="1"></div>
+            <div class="piece-slot" data-color="green" data-index="2"></div>
+            <div class="piece-slot" data-color="green" data-index="3"></div>
+          </div>
+          
+          <div class="corner yellow-home">
+            <div class="piece-slot" data-color="yellow" data-index="0"></div>
+            <div class="piece-slot" data-color="yellow" data-index="1"></div>
+            <div class="piece-slot" data-color="yellow" data-index="2"></div>
+            <div class="piece-slot" data-color="yellow" data-index="3"></div>
+          </div>
+
+          <div class="path-cells"></div>
+        </div>
+
+        <div class="game-controls">
+          <div class="players-status" id="game-players"></div>
+          
+          <div class="dice-container">
+            <div id="dice" class="dice">?</div>
+            <button id="roll-dice-btn" class="btn primary">Roll Dice</button>
+          </div>
+
+          <div id="piece-selection" class="piece-selection" style="display: none;">
+            <p>Select a piece to move:</p>
+            <div class="moveable-pieces"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-panel">
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chat-input">
+          <input type="text" id="chat-input" placeholder="Type a message...">
+          <button id="send-chat-btn" class="btn">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="game-over-modal" class="modal">
+      <div class="modal-content">
+        <h2>Game Over!</h2>
+        <p id="winner-text">Winner: Player</p>
+        <div class="modal-actions">
+          <button id="play-again-btn" class="btn primary">Play Again</button>
+          <button id="back-to-lobby-btn" class="btn secondary">Back to Lobby</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
