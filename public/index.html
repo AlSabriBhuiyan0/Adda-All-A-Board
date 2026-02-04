@@ -6,6 +6,8 @@
   <title>GameHub - Multi-Game App</title>
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="i18n.js"></script>
+  <script src="ads.js"></script>
 </head>
 <body>
   <div id="app">
@@ -50,66 +52,140 @@
 
     <div id="lobby-screen" class="screen">
       <header class="lobby-header">
-        <div class="user-info">
+        <div class="user-info" id="user-profile-btn" style="cursor: pointer;">
           <div class="avatar" id="user-avatar">U</div>
           <div class="user-details">
             <span id="username">Player</span>
             <span class="coins"><span id="user-coins">0</span> coins</span>
           </div>
         </div>
-        <button id="logout-btn" class="btn small">Logout</button>
+        <div class="header-actions">
+          <select id="language-selector" class="language-selector">
+            <option value="en">English</option>
+            <option value="es">Español</option>
+            <option value="hi">हिंदी</option>
+            <option value="bn">বাংলা</option>
+          </select>
+          <button id="logout-btn" class="btn small" data-i18n-btn="logout">Logout</button>
+        </div>
       </header>
 
       <div class="lobby-content">
-        <h2>Choose a Game</h2>
+        <h2 data-i18n="chooseGame">Choose a Game</h2>
         
         <div class="games-grid">
           <div class="game-card" data-game="ludo">
             <div class="game-icon ludo-icon">
               <div class="ludo-board-mini"></div>
             </div>
-            <h3>Ludo King</h3>
-            <p>2-4 Players</p>
+            <h3 data-i18n="ludoKing">Ludo King</h3>
+            <p data-i18n="players">2-4 Players</p>
             <div class="theme-selector">
-              <label>Theme:</label>
+              <label data-i18n="theme">Theme:</label>
               <select id="ludo-theme">
-                <option value="classic">Classic</option>
-                <option value="candy">Candy</option>
-                <option value="pirate">Pirate</option>
-                <option value="christmas">Christmas</option>
+                <option value="classic" data-i18n="classic">Classic</option>
+                <option value="candy" data-i18n="candy">Candy</option>
+                <option value="pirate" data-i18n="pirate">Pirate</option>
+                <option value="christmas" data-i18n="christmas">Christmas</option>
               </select>
             </div>
-            <button class="btn primary quick-match" data-game="ludo">Quick Play</button>
+            <div class="game-actions">
+              <button class="btn primary quick-match" data-game="ludo" data-i18n-btn="quickPlay">Quick Play</button>
+              <button class="btn secondary offline-play" data-game="ludo" data-i18n-btn="offline">Offline</button>
+            </div>
           </div>
 
           <div class="game-card" data-game="monopoly">
             <div class="game-icon monopoly-icon">$</div>
-            <h3>Monopoly</h3>
-            <p>2-6 Players</p>
-            <button class="btn primary quick-match" data-game="monopoly">Quick Play</button>
+            <h3 data-i18n="monopoly">Monopoly</h3>
+            <p data-i18n="players">2-6 Players</p>
+            <div class="game-actions">
+              <button class="btn primary quick-match" data-game="monopoly" data-i18n-btn="quickPlay">Quick Play</button>
+              <button class="btn secondary offline-play" data-game="monopoly" data-i18n-btn="offline">Offline</button>
+            </div>
           </div>
 
           <div class="game-card" data-game="uno">
             <div class="game-icon uno-icon">UNO</div>
-            <h3>UNO</h3>
-            <p>2-10 Players</p>
-            <button class="btn primary quick-match" data-game="uno">Quick Play</button>
+            <h3 data-i18n="uno">UNO</h3>
+            <p data-i18n="players">2-10 Players</p>
+            <div class="game-actions">
+              <button class="btn primary quick-match" data-game="uno" data-i18n-btn="quickPlay">Quick Play</button>
+              <button class="btn secondary offline-play" data-game="uno" data-i18n-btn="offline">Offline</button>
+            </div>
           </div>
         </div>
 
         <div class="section">
-          <h3>Active Games</h3>
+          <h3 data-i18n="activeGames">Active Games</h3>
           <div id="active-games" class="games-list">
-            <p class="empty-msg">No active games. Create one!</p>
+            <p class="empty-msg" data-i18n="noActiveGames">No active games. Create one!</p>
           </div>
         </div>
 
         <div class="section">
-          <h3>Leaderboard</h3>
+          <h3 data-i18n="savedGames">Saved Games</h3>
+          <div id="saved-games" class="games-list">
+            <div class="loading" data-i18n="loading">Loading...</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3 data-i18n="leaderboard">Leaderboard</h3>
           <div id="leaderboard" class="leaderboard">
+            <div class="loading" data-i18n="loading">Loading...</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-header">
+            <h3>Shop</h3>
+            <div>
+              <button id="watch-ad-btn" class="btn small" style="margin-right: 10px;">📺 Watch Ad (+10 coins)</button>
+              <button id="open-shop-btn" class="btn small">🛒 Shop</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-header">
+            <h3 data-i18n="friends">Friends</h3>
+            <button id="add-friend-btn" class="btn small" data-i18n-btn="addFriend">+ Add Friend</button>
+          </div>
+          <div id="friends-list" class="friends-list">
             <div class="loading">Loading...</div>
           </div>
+          <div id="pending-requests" class="pending-requests" style="display: none;">
+            <h4>Pending Requests</h4>
+            <div id="pending-list"></div>
+          </div>
         </div>
+      </div>
+    </div>
+
+    <div id="add-friend-modal" class="modal">
+      <div class="modal-content">
+        <h2>Add Friend</h2>
+        <input type="text" id="friend-username-input" placeholder="Enter username">
+        <div class="modal-actions">
+          <button id="send-friend-request-btn" class="btn primary">Send Request</button>
+          <button id="cancel-add-friend-btn" class="btn secondary">Cancel</button>
+        </div>
+        <div id="friend-request-error" class="error-msg"></div>
+      </div>
+    </div>
+
+    <div id="shop-modal" class="modal">
+      <div class="modal-content shop-modal-content">
+        <h2>🛒 Shop</h2>
+        <div class="shop-tabs">
+          <button class="shop-tab active" data-tab="themes">Themes</button>
+          <button class="shop-tab" data-tab="cosmetics">Cosmetics</button>
+        </div>
+        <div id="shop-content" class="shop-content">
+          <div class="loading">Loading...</div>
+        </div>
+        <button id="close-shop-btn" class="btn secondary" style="margin-top: 20px;">Close</button>
       </div>
     </div>
 
@@ -136,7 +212,10 @@
           <span id="game-title">Ludo</span>
           <span id="turn-indicator">Your Turn</span>
         </div>
-        <button id="exit-game-btn" class="btn small">Exit</button>
+        <div class="game-header-actions">
+          <button id="save-game-btn" class="btn small" style="display: none;">💾 Save Game</button>
+          <button id="exit-game-btn" class="btn small">Exit</button>
+        </div>
       </div>
 
       <div id="ludo-game" class="game-container" style="display: none;">
@@ -362,6 +441,50 @@
         <div class="modal-actions">
           <button id="play-again-btn" class="btn primary">Play Again</button>
           <button id="back-to-lobby-btn" class="btn secondary">Back to Lobby</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="profile-screen" class="screen">
+      <div class="profile-container">
+        <div class="profile-header">
+          <button id="back-to-lobby-from-profile" class="btn secondary">← Back</button>
+          <h2 data-i18n="profile">Profile</h2>
+        </div>
+        
+        <div class="profile-content">
+          <div class="profile-card">
+            <div class="profile-avatar-large" id="profile-avatar">U</div>
+            <h2 id="profile-username">Username</h2>
+            <div class="profile-stats-row">
+              <div class="stat-item">
+                <div class="stat-value" id="profile-wins">0</div>
+                <div class="stat-label">Wins</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-value" id="profile-games">0</div>
+                <div class="stat-label">Games Played</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-value" id="profile-coins">0</div>
+                <div class="stat-label">Coins</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="profile-section">
+            <h3>Game Statistics</h3>
+            <div id="game-stats" class="game-stats">
+              <div class="loading">Loading...</div>
+            </div>
+          </div>
+
+          <div class="profile-section">
+            <h3>Recent Games</h3>
+            <div id="recent-games" class="recent-games">
+              <div class="loading">Loading...</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

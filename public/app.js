@@ -123,7 +123,8 @@ const screens = {
   auth: document.getElementById('auth-screen'),
   lobby: document.getElementById('lobby-screen'),
   waiting: document.getElementById('waiting-room'),
-  game: document.getElementById('game-screen')
+  game: document.getElementById('game-screen'),
+  profile: document.getElementById('profile-screen')
 };
 
 function showScreen(screenName) {
@@ -200,6 +201,17 @@ function handleAuthSuccess(data) {
   
   showScreen('lobby');
   loadLeaderboard();
+  loadFriends();
+  loadSavedGames();
+  
+  // Set language selector
+  const langSelector = document.getElementById('language-selector');
+  if (langSelector) {
+    langSelector.value = currentLanguage;
+    langSelector.addEventListener('change', (e) => {
+      setLanguage(e.target.value);
+    });
+  }
 }
 
 function showError(message) {
@@ -215,6 +227,89 @@ document.getElementById('logout-btn').addEventListener('click', () => {
   authToken = null;
   showScreen('auth');
 });
+
+document.getElementById('user-profile-btn')?.addEventListener('click', () => {
+  loadUserProfile();
+  showScreen('profile');
+});
+
+document.getElementById('back-to-lobby-from-profile')?.addEventListener('click', () => {
+  showScreen('lobby');
+});
+
+async function loadUserProfile() {
+  if (!currentUser) return;
+  
+  try {
+    const res = await fetch(`/api/profile/${currentUser.id}`, {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    const data = await res.json();
+    
+    if (res.ok) {
+      // Update profile header
+      document.getElementById('profile-avatar').textContent = data.username[0].toUpperCase();
+      document.getElementById('profile-username').textContent = data.username;
+      document.getElementById('profile-wins').textContent = data.wins || 0;
+      document.getElementById('profile-games').textContent = data.games_played || 0;
+      document.getElementById('profile-coins').textContent = data.coins || 0;
+      
+      // Update game stats
+      const statsContainer = document.getElementById('game-stats');
+      if (data.stats && data.stats.length > 0) {
+        statsContainer.innerHTML = data.stats.map(stat => `
+          <div class="game-stat-item">
+            <div class="game-stat-type">${stat.game_type.charAt(0).toUpperCase() + stat.game_type.slice(1)}</div>
+            <div class="game-stat-details">
+              <span>${stat.games} games</span>
+              <span>${stat.wins} wins</span>
+              <span>${stat.games > 0 ? Math.round((stat.wins / stat.games) * 100) : 0}% win rate</span>
+            </div>
+          </div>
+        `).join('');
+      } else {
+        statsContainer.innerHTML = '<p class="empty-msg">No game statistics yet</p>';
+      }
+      
+      // Load recent games
+      await loadRecentGames(currentUser.id);
+    }
+  } catch (err) {
+    console.error('Failed to load profile:', err);
+  }
+}
+
+async function loadRecentGames(userId) {
+  try {
+    const res = await fetch(`/api/games/history/${userId}`, {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    const data = await res.json();
+    
+    const container = document.getElementById('recent-games');
+    if (data.length === 0) {
+      container.innerHTML = '<p class="empty-msg">No recent games</p>';
+    } else {
+      container.innerHTML = data.slice(0, 10).map(game => {
+        const playedDate = new Date(game.played_at);
+        return `
+          <div class="recent-game-item">
+            <div class="recent-game-info">
+              <div class="recent-game-type">${game.game_type.charAt(0).toUpperCase() + game.game_type.slice(1)}</div>
+              <div class="recent-game-date">${playedDate.toLocaleDateString()}</div>
+            </div>
+            <div class="recent-game-result ${game.result === 'win' ? 'win' : 'loss'}">
+              ${game.result === 'win' ? '✓ Win' : '✗ Loss'}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  } catch (err) {
+    console.error('Failed to load recent games:', err);
+    document.getElementById('recent-games').innerHTML = '<p class="empty-msg">Failed to load recent games</p>';
+  }
+}
 
 async function loadLeaderboard() {
   try {
@@ -240,11 +335,320 @@ async function loadLeaderboard() {
   }
 }
 
+async function loadFriends() {
+  try {
+    const res = await fetch('/api/friends', {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    const data = await res.json();
+    
+    const container = document.getElementById('friends-list');
+    if (data.length === 0) {
+      container.innerHTML = '<p class="empty-msg">No friends yet. Add some!</p>';
+    } else {
+      container.innerHTML = data.map(friend => `
+        <div class="friend-item">
+          <div class="avatar">${friend.username[0].toUpperCase()}</div>
+          <div class="friend-info">
+            <div class="friend-name">${friend.username}</div>
+            <div class="friend-stats">${friend.wins || 0} wins • ${friend.games_played || 0} games</div>
+          </div>
+          <button class="btn small invite-friend-btn" data-friend-id="${friend.friend_id}" data-username="${friend.username}">Invite</button>
+          <button class="btn small remove-friend-btn" data-friend-id="${friend.friend_id}">Remove</button>
+        </div>
+      `).join('');
+      
+      // Add event listeners
+      document.querySelectorAll('.invite-friend-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const friendId = btn.dataset.friendId;
+          const username = btn.dataset.username;
+          inviteFriendToGame(friendId, username);
+        });
+      });
+      
+      document.querySelectorAll('.remove-friend-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const friendId = btn.dataset.friendId;
+          if (confirm('Remove this friend?')) {
+            await removeFriend(friendId);
+          }
+        });
+      });
+    }
+    
+    // Load pending requests
+    await loadPendingRequests();
+  } catch (err) {
+    console.error('Failed to load friends:', err);
+    document.getElementById('friends-list').innerHTML = '<p class="empty-msg">Failed to load friends</p>';
+  }
+}
+
+async function loadPendingRequests() {
+  try {
+    const res = await fetch('/api/friends/pending', {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    const data = await res.json();
+    
+    const container = document.getElementById('pending-list');
+    const pendingSection = document.getElementById('pending-requests');
+    
+    if (data.length === 0) {
+      pendingSection.style.display = 'none';
+    } else {
+      pendingSection.style.display = 'block';
+      container.innerHTML = data.map(request => `
+        <div class="friend-item">
+          <div class="avatar">${request.username[0].toUpperCase()}</div>
+          <div class="friend-info">
+            <div class="friend-name">${request.username}</div>
+            <div class="friend-stats">Wants to be friends</div>
+          </div>
+          <button class="btn small accept-friend-btn" data-friend-id="${request.friend_id}">Accept</button>
+          <button class="btn small reject-friend-btn" data-friend-id="${request.friend_id}">Reject</button>
+        </div>
+      `).join('');
+      
+      document.querySelectorAll('.accept-friend-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          await acceptFriendRequest(btn.dataset.friendId);
+        });
+      });
+      
+      document.querySelectorAll('.reject-friend-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          await rejectFriendRequest(btn.dataset.friendId);
+        });
+      });
+    }
+  } catch (err) {
+    console.error('Failed to load pending requests:', err);
+  }
+}
+
+async function sendFriendRequest(username) {
+  try {
+    const res = await fetch('/api/friends/add', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify({ username })
+    });
+    
+    const data = await res.json();
+    if (res.ok) {
+      alert('Friend request sent!');
+      document.getElementById('add-friend-modal').classList.remove('active');
+      document.getElementById('friend-username-input').value = '';
+    } else {
+      document.getElementById('friend-request-error').textContent = data.error || 'Failed to send request';
+    }
+  } catch (err) {
+    document.getElementById('friend-request-error').textContent = 'Connection error';
+  }
+}
+
+async function acceptFriendRequest(friendId) {
+  try {
+    const res = await fetch('/api/friends/accept', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify({ friendId })
+    });
+    
+    if (res.ok) {
+      await loadFriends();
+    }
+  } catch (err) {
+    console.error('Failed to accept friend request:', err);
+  }
+}
+
+async function rejectFriendRequest(friendId) {
+  try {
+    const res = await fetch('/api/friends/reject', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify({ friendId })
+    });
+    
+    if (res.ok) {
+      await loadPendingRequests();
+    }
+  } catch (err) {
+    console.error('Failed to reject friend request:', err);
+  }
+}
+
+async function removeFriend(friendId) {
+  try {
+    const res = await fetch('/api/friends/remove', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify({ friendId })
+    });
+    
+    if (res.ok) {
+      await loadFriends();
+    }
+  } catch (err) {
+    console.error('Failed to remove friend:', err);
+  }
+}
+
+function inviteFriendToGame(friendId, username) {
+  if (!currentGame) {
+    alert('Please create or join a game first');
+    return;
+  }
+  // TODO: Implement friend invitation via socket
+  alert(`Invitation sent to ${username}!`);
+}
+
+// Friend modal handlers
+document.getElementById('add-friend-btn')?.addEventListener('click', () => {
+  document.getElementById('add-friend-modal').classList.add('active');
+});
+
+document.getElementById('open-shop-btn')?.addEventListener('click', async () => {
+  await loadShop();
+  document.getElementById('shop-modal').classList.add('active');
+});
+
+document.getElementById('watch-ad-btn')?.addEventListener('click', () => {
+  if (typeof showRewardedAdForCoins === 'function') {
+    showRewardedAdForCoins();
+  } else {
+    alert('Ad system not available');
+  }
+});
+
+document.querySelectorAll('.shop-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.shop-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const tabType = tab.dataset.tab;
+    renderShopTab(tabType);
+  });
+});
+
+async function loadShop() {
+  try {
+    const res = await fetch('/api/shop', {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    const data = await res.json();
+    
+    window.shopData = data;
+    renderShopTab('themes');
+  } catch (err) {
+    console.error('Failed to load shop:', err);
+    document.getElementById('shop-content').innerHTML = '<p class="empty-msg">Failed to load shop</p>';
+  }
+}
+
+function renderShopTab(tabType) {
+  if (!window.shopData) return;
+  
+  const items = window.shopData[tabType] || [];
+  const container = document.getElementById('shop-content');
+  
+  if (items.length === 0) {
+    container.innerHTML = '<p class="empty-msg">No items available</p>';
+    return;
+  }
+  
+  container.innerHTML = items.map(item => `
+    <div class="shop-item ${item.purchased ? 'purchased' : ''}">
+      <div class="shop-item-info">
+        <h4>${item.name}</h4>
+        <div class="shop-item-price">${item.purchased ? '✓ Owned' : `💰 ${item.price} coins`}</div>
+      </div>
+      ${item.purchased ? '' : `<button class="btn small purchase-btn" data-type="${tabType}" data-id="${item.id}">Buy</button>`}
+    </div>
+  `).join('');
+  
+  document.querySelectorAll('.purchase-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await purchaseItem(btn.dataset.type, btn.dataset.id);
+    });
+  });
+}
+
+async function purchaseItem(itemType, itemId) {
+  try {
+    const res = await fetch('/api/shop/purchase', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify({ itemType, itemId })
+    });
+    
+    const data = await res.json();
+    if (res.ok) {
+      alert(`Purchase successful! Remaining coins: ${data.remainingCoins}`);
+      document.getElementById('user-coins').textContent = data.remainingCoins;
+      currentUser.coins = data.remainingCoins;
+      await loadShop();
+    } else {
+      alert(data.error || 'Purchase failed');
+    }
+  } catch (err) {
+    console.error('Purchase error:', err);
+    alert('Failed to process purchase');
+  }
+}
+
+document.getElementById('cancel-add-friend-btn')?.addEventListener('click', () => {
+  document.getElementById('add-friend-modal').classList.remove('active');
+  document.getElementById('friend-username-input').value = '';
+  document.getElementById('friend-request-error').textContent = '';
+});
+
+document.getElementById('send-friend-request-btn')?.addEventListener('click', () => {
+  const username = document.getElementById('friend-username-input').value.trim();
+  if (username) {
+    sendFriendRequest(username);
+  }
+});
+
+document.getElementById('friend-username-input')?.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    document.getElementById('send-friend-request-btn').click();
+  }
+});
+
+document.getElementById('close-shop-btn')?.addEventListener('click', () => {
+  document.getElementById('shop-modal').classList.remove('active');
+});
+
 document.querySelectorAll('.quick-match').forEach(btn => {
   btn.addEventListener('click', () => {
     const gameType = btn.dataset.game;
     const theme = gameType === 'ludo' ? selectedTheme : 'classic';
     socket.emit('quick_match', gameType, theme);
+  });
+});
+
+document.querySelectorAll('.offline-play').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const gameType = btn.dataset.game;
+    startOfflineGame(gameType);
   });
 });
 
@@ -258,16 +662,121 @@ document.getElementById('leave-room-btn').addEventListener('click', () => {
 });
 
 document.getElementById('exit-game-btn').addEventListener('click', () => {
-  socket.emit('leave_game');
-  showScreen('lobby');
+  if (offlineMode) {
+    if (confirm('Exit game? Progress will be saved.')) {
+      saveOfflineGame();
+      showScreen('lobby');
+    }
+  } else {
+    socket.emit('leave_game');
+    showScreen('lobby');
+  }
 });
 
-document.getElementById('roll-dice-btn').addEventListener('click', () => {
-  const dice = document.getElementById('dice-3d');
-  if (dice) {
-    dice.classList.add('rolling');
+document.getElementById('save-game-btn')?.addEventListener('click', async () => {
+  if (offlineMode && offlineGame) {
+    saveOfflineGame();
+    alert('Game saved locally!');
+  } else if (currentGame) {
+    await saveGame(currentGame.gameId);
   }
-  socket.emit('roll_dice');
+});
+
+async function saveGame(gameId) {
+  try {
+    const res = await fetch(`/api/games/${gameId}/save`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authToken}`
+      }
+    });
+    
+    const data = await res.json();
+    if (res.ok) {
+      alert('Game saved! You can resume it later from the lobby.');
+      await loadSavedGames();
+    } else {
+      alert(data.error || 'Failed to save game');
+    }
+  } catch (err) {
+    console.error('Save game error:', err);
+    alert('Failed to save game');
+  }
+}
+
+async function loadSavedGames() {
+  try {
+    const res = await fetch('/api/games/saved', {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    const data = await res.json();
+    
+    const container = document.getElementById('saved-games');
+    if (data.length === 0) {
+      container.innerHTML = '<p class="empty-msg">No saved games</p>';
+    } else {
+      container.innerHTML = data.map(game => {
+        const players = JSON.parse(game.players);
+        const savedDate = new Date(game.saved_at);
+        return `
+          <div class="game-item">
+            <div class="game-item-info">
+              <div class="game-item-title">${game.game_type.charAt(0).toUpperCase() + game.game_type.slice(1)}</div>
+              <div class="game-item-details">${players.length} players • Saved ${savedDate.toLocaleDateString()}</div>
+            </div>
+            <button class="btn small resume-game-btn" data-game-id="${game.id}">Resume</button>
+          </div>
+        `;
+      }).join('');
+      
+      document.querySelectorAll('.resume-game-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          await resumeGame(btn.dataset.gameId);
+        });
+      });
+    }
+  } catch (err) {
+    console.error('Failed to load saved games:', err);
+    document.getElementById('saved-games').innerHTML = '<p class="empty-msg">Failed to load saved games</p>';
+  }
+}
+
+async function resumeGame(gameId) {
+  try {
+    const res = await fetch(`/api/games/${gameId}/resume`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authToken}`
+      }
+    });
+    
+    const data = await res.json();
+    if (res.ok) {
+      // Join the game via socket
+      socket.emit('join_game', gameId);
+      currentGame = data.gameState;
+      showGameContainer(data.gameState.type);
+      showScreen('game');
+      updateGameBoard(data.gameState);
+    } else {
+      alert(data.error || 'Failed to resume game');
+    }
+  } catch (err) {
+    console.error('Resume game error:', err);
+    alert('Failed to resume game');
+  }
+}
+
+document.getElementById('roll-dice-btn').addEventListener('click', () => {
+  if (offlineMode && offlineGame) {
+    handleOfflineRollDice();
+  } else {
+    const dice = document.getElementById('dice-3d');
+    if (dice) {
+      dice.classList.add('rolling');
+    }
+    socket.emit('roll_dice');
+  }
 });
 
 document.getElementById('send-chat-btn').addEventListener('click', sendChatMessage);
@@ -286,6 +795,60 @@ function sendChatMessage() {
 
 socket.on('authenticated', (user) => {
   console.log('Socket authenticated:', user);
+});
+
+socket.on('reconnected_to_games', (gameIds) => {
+  if (gameIds && gameIds.length > 0) {
+    const message = `You have ${gameIds.length} active game(s). Would you like to reconnect?`;
+    if (confirm(message)) {
+      // Reconnect to the first game
+      socket.emit('reconnect_to_game', gameIds[0]);
+    }
+  }
+});
+
+socket.on('player_reconnected', (data) => {
+  console.log(`${data.username} reconnected`);
+  if (currentGame && currentGame.gameId === data.gameState.gameId) {
+    currentGame = data.gameState;
+    updateGameBoard(data.gameState);
+  }
+});
+
+socket.on('turn_timeout', (data) => {
+  const skippedPlayer = data.gameState.players[data.skippedPlayerIndex];
+  if (skippedPlayer) {
+    alert(`${skippedPlayer.username} timed out. Turn skipped.`);
+  }
+  currentGame = data.gameState;
+  updateGameBoard(data.gameState);
+});
+
+// Handle socket reconnection
+socket.on('connect', () => {
+  console.log('Socket connected');
+  if (authToken) {
+    socket.emit('authenticate', authToken);
+  }
+});
+
+socket.on('disconnect', () => {
+  console.log('Socket disconnected');
+  // Show reconnection message
+  const reconnectMsg = document.createElement('div');
+  reconnectMsg.id = 'reconnect-message';
+  reconnectMsg.style.cssText = 'position: fixed; top: 20px; right: 20px; background: var(--warning); color: var(--dark); padding: 15px; border-radius: 8px; z-index: 10000;';
+  reconnectMsg.textContent = 'Connection lost. Reconnecting...';
+  document.body.appendChild(reconnectMsg);
+});
+
+socket.on('connect', () => {
+  const reconnectMsg = document.getElementById('reconnect-message');
+  if (reconnectMsg) {
+    reconnectMsg.textContent = 'Reconnected!';
+    reconnectMsg.style.background = 'var(--success)';
+    setTimeout(() => reconnectMsg.remove(), 2000);
+  }
 });
 
 socket.on('auth_error', (error) => {
@@ -389,6 +952,12 @@ function showGameContainer(gameType) {
     document.getElementById('uno-game').style.display = 'flex';
     document.getElementById('game-title').textContent = 'UNO';
   }
+  
+  // Show save button for online games (not offline)
+  const saveBtn = document.getElementById('save-game-btn');
+  if (saveBtn) {
+    saveBtn.style.display = offlineMode ? 'none' : 'block';
+  }
 }
 
 socket.on('dice_rolled', (data) => {
@@ -446,6 +1015,11 @@ socket.on('game_over', (data) => {
   const modal = document.getElementById('game-over-modal');
   document.getElementById('winner-text').textContent = `Winner: ${data.winner.username}`;
   modal.classList.add('active');
+  
+  // Show ad after game (placeholder)
+  if (typeof showAdAfterGame === 'function') {
+    showAdAfterGame();
+  }
 });
 
 socket.on('chat_message', (data) => {
@@ -772,11 +1346,15 @@ document.getElementById('back-to-lobby-btn').addEventListener('click', () => {
 });
 
 document.getElementById('monopoly-roll-btn')?.addEventListener('click', () => {
-  const dice1 = document.getElementById('monopoly-dice-1');
-  const dice2 = document.getElementById('monopoly-dice-2');
-  if (dice1) dice1.classList.add('rolling');
-  if (dice2) dice2.classList.add('rolling');
-  socket.emit('monopoly_roll');
+  if (offlineMode && offlineGame) {
+    handleOfflineMonopolyRoll();
+  } else {
+    const dice1 = document.getElementById('monopoly-dice-1');
+    const dice2 = document.getElementById('monopoly-dice-2');
+    if (dice1) dice1.classList.add('rolling');
+    if (dice2) dice2.classList.add('rolling');
+    socket.emit('monopoly_roll');
+  }
 });
 
 document.getElementById('monopoly-buy-btn')?.addEventListener('click', () => {
@@ -797,7 +1375,22 @@ document.getElementById('monopoly-pass-btn')?.addEventListener('click', () => {
 });
 
 document.getElementById('uno-draw-btn')?.addEventListener('click', () => {
-  socket.emit('uno_draw_card');
+  if (offlineMode && offlineGame) {
+    const currentPlayer = offlineGame.players[offlineGame.currentPlayerIndex];
+    if (offlineGame.deck.length === 0) {
+      // Reshuffle
+      const topCard = offlineGame.discardPile.pop();
+      offlineGame.deck = shuffleArray(offlineGame.discardPile);
+      offlineGame.discardPile = [topCard];
+    }
+    const card = offlineGame.deck.pop();
+    currentPlayer.hand.push(card);
+    advanceUnoTurn();
+    saveOfflineGame();
+    updateOfflineGameBoard();
+  } else {
+    socket.emit('uno_draw_card');
+  }
 });
 
 document.getElementById('uno-call-btn')?.addEventListener('click', () => {
@@ -1205,7 +1798,11 @@ window.playUnoCard = function(index, color, value) {
     pendingCardIndex = index;
     document.getElementById('uno-color-picker').style.display = 'flex';
   } else {
-    socket.emit('uno_play_card', index, null);
+    if (offlineMode && offlineGame) {
+      handleOfflineUnoPlayCard(index);
+    } else {
+      socket.emit('uno_play_card', index, null);
+    }
   }
 };
 
@@ -1378,4 +1975,449 @@ if (authToken) {
   });
 } else {
   showScreen('auth');
+}
+
+// Offline Game System
+let offlineGame = null;
+let offlineMode = false;
+
+function startOfflineGame(gameType) {
+  offlineMode = true;
+  
+  // Show player setup modal
+  showPlayerSetupModal(gameType);
+}
+
+function showPlayerSetupModal(gameType) {
+  const maxPlayers = gameType === 'ludo' ? 4 : gameType === 'monopoly' ? 6 : 10;
+  const modal = document.createElement('div');
+  modal.className = 'modal active';
+  modal.id = 'player-setup-modal';
+  modal.innerHTML = `
+    <div class="modal-content">
+      <h2>Setup Local Game</h2>
+      <p>Enter player names (${gameType === 'ludo' ? '2-4' : gameType === 'monopoly' ? '2-6' : '2-10'} players)</p>
+      <div id="player-inputs" style="display: flex; flex-direction: column; gap: 10px; margin: 20px 0;">
+        <input type="text" class="player-name-input" placeholder="Player 1" value="${currentUser?.username || 'Player 1'}">
+        <input type="text" class="player-name-input" placeholder="Player 2" value="Player 2">
+      </div>
+      <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+        <button id="add-player-btn" class="btn secondary">+ Add Player</button>
+        <button id="remove-player-btn" class="btn secondary">- Remove Player</button>
+      </div>
+      <div class="modal-actions">
+        <button id="start-local-game-btn" class="btn primary">Start Game</button>
+        <button id="cancel-setup-btn" class="btn secondary">Cancel</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  
+  let playerCount = 2;
+  const maxP = maxPlayers;
+  
+  document.getElementById('add-player-btn').addEventListener('click', () => {
+    if (playerCount < maxP) {
+      playerCount++;
+      const inputs = document.getElementById('player-inputs');
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'player-name-input';
+      input.placeholder = `Player ${playerCount}`;
+      input.value = `Player ${playerCount}`;
+      inputs.appendChild(input);
+    }
+  });
+  
+  document.getElementById('remove-player-btn').addEventListener('click', () => {
+    if (playerCount > 2) {
+      const inputs = document.getElementById('player-inputs');
+      inputs.removeChild(inputs.lastChild);
+      playerCount--;
+    }
+  });
+  
+  document.getElementById('start-local-game-btn').addEventListener('click', () => {
+    const inputs = Array.from(document.querySelectorAll('.player-name-input'));
+    const playerNames = inputs.map((inp, idx) => inp.value.trim() || `Player ${idx + 1}`);
+    
+    if (playerNames.length < 2) {
+      alert('Need at least 2 players');
+      return;
+    }
+    
+    modal.remove();
+    initializeLocalGame(gameType, playerNames);
+  });
+  
+  document.getElementById('cancel-setup-btn').addEventListener('click', () => {
+    modal.remove();
+  });
+}
+
+function initializeLocalGame(gameType, playerNames) {
+  // Create offline game state
+  offlineGame = {
+    type: gameType,
+    players: [],
+    currentPlayerIndex: 0,
+    status: 'playing',
+    theme: gameType === 'ludo' ? selectedTheme : 'classic',
+    localMultiplayer: true
+  };
+  
+  // Create players
+  playerNames.forEach((name, i) => {
+    offlineGame.players.push({
+      id: i + 1,
+      username: name,
+      socketId: `local_${i}`,
+      avatar: name[0].toUpperCase()
+    });
+  });
+  
+  // Initialize game based on type
+  if (gameType === 'ludo') {
+    initOfflineLudo();
+  } else if (gameType === 'monopoly') {
+    initOfflineMonopoly();
+  } else if (gameType === 'uno') {
+    initOfflineUno();
+  }
+  
+  // Save to localStorage
+  saveOfflineGame();
+  
+  // Show game screen
+  showGameContainer(gameType);
+  showScreen('game');
+  updateOfflineGameBoard();
+}
+
+function initOfflineLudo() {
+  offlineGame.colors = ['red', 'blue', 'green', 'yellow'];
+  offlineGame.board = {
+    pieces: {},
+    homePositions: {
+      red: [0, 1, 2, 3],
+      blue: [0, 1, 2, 3],
+      green: [0, 1, 2, 3],
+      yellow: [0, 1, 2, 3]
+    },
+    startPositions: { red: 1, blue: 14, green: 27, yellow: 40 },
+    safeSpots: [1, 9, 14, 22, 27, 35, 40, 48]
+  };
+  
+  offlineGame.players.forEach((player, index) => {
+    const color = offlineGame.colors[index];
+    player.color = color;
+    player.pieces = [-1, -1, -1, -1];
+    offlineGame.board.pieces[color] = [-1, -1, -1, -1];
+  });
+  
+  offlineGame.diceValue = null;
+}
+
+function initOfflineMonopoly() {
+  offlineGame.board = {
+    properties: [
+      { id: 0, name: 'GO', type: 'go', price: 0 },
+      { id: 1, name: 'Mediterranean Ave', type: 'property', color: 'brown', price: 60, rent: [2, 10, 30, 90, 160, 250], owner: null, houses: 0 },
+      // ... (simplified - would include all 40 properties)
+    ]
+  };
+  
+  offlineGame.players.forEach((player, index) => {
+    const tokens = ['car', 'hat', 'dog', 'ship', 'boot', 'thimble'];
+    player.token = tokens[index];
+    player.position = 0;
+    player.money = 1500;
+    player.properties = [];
+    player.inJail = false;
+  });
+  
+  offlineGame.diceValue = [0, 0];
+}
+
+function initOfflineUno() {
+  offlineGame.deck = [];
+  offlineGame.discardPile = [];
+  offlineGame.currentColor = null;
+  offlineGame.direction = 1;
+  
+  // Initialize deck (simplified)
+  const colors = ['red', 'blue', 'green', 'yellow'];
+  colors.forEach(color => {
+    offlineGame.deck.push({ color, value: '0' });
+    for (let i = 1; i <= 9; i++) {
+      offlineGame.deck.push({ color, value: String(i) });
+      offlineGame.deck.push({ color, value: String(i) });
+    }
+    ['skip', 'reverse', 'draw2'].forEach(special => {
+      offlineGame.deck.push({ color, value: special });
+      offlineGame.deck.push({ color, value: special });
+    });
+  });
+  
+  for (let i = 0; i < 4; i++) {
+    offlineGame.deck.push({ color: 'wild', value: 'wild' });
+    offlineGame.deck.push({ color: 'wild', value: 'wild4' });
+  }
+  
+  // Shuffle deck
+  offlineGame.deck = shuffleArray(offlineGame.deck);
+  
+  // Deal cards
+  offlineGame.players.forEach(player => {
+    player.hand = offlineGame.deck.splice(0, 7);
+    player.uno = false;
+  });
+  
+  // Start card
+  let startCard = offlineGame.deck.pop();
+  while (startCard.color === 'wild') {
+    offlineGame.deck.unshift(startCard);
+    offlineGame.deck = shuffleArray(offlineGame.deck);
+    startCard = offlineGame.deck.pop();
+  }
+  offlineGame.discardPile = [startCard];
+  offlineGame.currentColor = startCard.color;
+}
+
+function shuffleArray(array) {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+function saveOfflineGame() {
+  if (offlineGame) {
+    localStorage.setItem('offlineGame', JSON.stringify(offlineGame));
+  }
+}
+
+function loadOfflineGame() {
+  const saved = localStorage.getItem('offlineGame');
+  if (saved) {
+    offlineGame = JSON.parse(saved);
+    offlineMode = true;
+    return true;
+  }
+  return false;
+}
+
+function updateOfflineGameBoard() {
+  if (!offlineGame) return;
+  
+  const gameState = {
+    gameId: 'offline',
+    type: offlineGame.type,
+    status: offlineGame.status,
+    players: offlineGame.players,
+    currentPlayerIndex: offlineGame.currentPlayerIndex,
+    diceValue: offlineGame.diceValue,
+    maxPlayers: offlineGame.players.length
+  };
+  
+  if (offlineGame.type === 'ludo') {
+    gameState.colors = offlineGame.colors;
+    gameState.board = offlineGame.board;
+    updateLudoBoard(gameState);
+  } else if (offlineGame.type === 'monopoly') {
+    gameState.board = offlineGame.board;
+    updateMonopolyBoard(gameState);
+  } else if (offlineGame.type === 'uno') {
+    gameState.direction = offlineGame.direction;
+    gameState.topCard = offlineGame.discardPile[offlineGame.discardPile.length - 1];
+    gameState.currentColor = offlineGame.currentColor;
+    gameState.deckCount = offlineGame.deck.length;
+    updateUnoTable(gameState);
+    updateUnoHand(offlineGame.players[0].hand);
+  }
+  
+  updateGameBoard(gameState);
+}
+
+// Offline Game Handlers
+function handleOfflineRollDice() {
+  if (!offlineGame || offlineGame.currentPlayerIndex !== 0) {
+    alert('Not your turn!');
+    return;
+  }
+  
+  const dice = document.getElementById('dice-3d');
+  if (dice) {
+    dice.classList.add('rolling');
+    setTimeout(() => {
+      dice.classList.remove('rolling');
+      offlineGame.diceValue = Math.floor(Math.random() * 6) + 1;
+      setDiceRotation(dice, offlineGame.diceValue);
+      saveOfflineGame();
+      updateOfflineGameBoard();
+      
+      // Show moveable pieces for Ludo
+      if (offlineGame.type === 'ludo') {
+        const currentPlayer = offlineGame.players[offlineGame.currentPlayerIndex];
+        showMoveablePieces(currentPlayer, offlineGame.diceValue);
+      }
+    }, 1000);
+  }
+}
+
+function handleOfflineMovePiece(pieceIndex) {
+  if (!offlineGame || offlineGame.type !== 'ludo') return;
+  
+  const currentPlayer = offlineGame.players[offlineGame.currentPlayerIndex];
+  const piecePos = currentPlayer.pieces[pieceIndex];
+  
+  // Validate move
+  if (piecePos === -1 && offlineGame.diceValue !== 6) {
+    alert('Need a 6 to move piece out');
+    return;
+  }
+  if (piecePos === -1 && offlineGame.diceValue === 6) {
+    currentPlayer.pieces[pieceIndex] = 0;
+  } else if (piecePos >= 0) {
+    const newPos = piecePos + offlineGame.diceValue;
+    if (newPos > 57) {
+      alert('Cannot move that far');
+      return;
+    }
+    currentPlayer.pieces[pieceIndex] = newPos;
+    
+    // Check for win
+    if (currentPlayer.pieces.every(p => p === 57)) {
+      alert(`${currentPlayer.username} wins!`);
+      offlineGame.status = 'finished';
+    }
+  }
+  
+  // Advance turn if not a 6
+  if (offlineGame.diceValue !== 6) {
+    offlineGame.currentPlayerIndex = (offlineGame.currentPlayerIndex + 1) % offlineGame.players.length;
+  }
+  
+  offlineGame.diceValue = null;
+  saveOfflineGame();
+  updateOfflineGameBoard();
+  document.getElementById('piece-selection').style.display = 'none';
+}
+
+function handleOfflineMonopolyRoll() {
+  if (!offlineGame || offlineGame.type !== 'monopoly') return;
+  
+  const currentPlayer = offlineGame.players[offlineGame.currentPlayerIndex];
+  const dice1 = Math.floor(Math.random() * 6) + 1;
+  const dice2 = Math.floor(Math.random() * 6) + 1;
+  
+  const totalMove = dice1 + dice2;
+  const oldPosition = currentPlayer.position;
+  currentPlayer.position = (currentPlayer.position + totalMove) % 40;
+  
+  if (currentPlayer.position < oldPosition) {
+    currentPlayer.money += 200; // Passed GO
+  }
+  
+  const landedOn = offlineGame.board.properties[currentPlayer.position];
+  if (landedOn.type === 'property' && landedOn.owner === null) {
+    // Show buy option
+    const buyBtn = document.getElementById('monopoly-buy-btn');
+    if (buyBtn && currentPlayer.money >= landedOn.price) {
+      buyBtn.style.display = 'block';
+      buyBtn.onclick = () => {
+        currentPlayer.money -= landedOn.price;
+        landedOn.owner = currentPlayer.id;
+        currentPlayer.properties.push(landedOn.id);
+        buyBtn.style.display = 'none';
+        saveOfflineGame();
+        updateOfflineGameBoard();
+      };
+    }
+  }
+  
+  // Advance turn
+  if (dice1 !== dice2) {
+    offlineGame.currentPlayerIndex = (offlineGame.currentPlayerIndex + 1) % offlineGame.players.length;
+  }
+  
+  saveOfflineGame();
+  updateOfflineGameBoard();
+}
+
+function handleOfflineUnoPlayCard(cardIndex) {
+  if (!offlineGame || offlineGame.type !== 'uno') return;
+  
+  const currentPlayer = offlineGame.players[offlineGame.currentPlayerIndex];
+  const card = currentPlayer.hand[cardIndex];
+  
+  if (!card) return;
+  
+  // Check if card can be played
+  const topCard = offlineGame.discardPile[offlineGame.discardPile.length - 1];
+  const canPlay = card.color === 'wild' || 
+                  card.color === offlineGame.currentColor || 
+                  card.value === topCard.value;
+  
+  if (!canPlay) {
+    alert('Cannot play this card');
+    return;
+  }
+  
+  // Play card
+  currentPlayer.hand.splice(cardIndex, 1);
+  offlineGame.discardPile.push(card);
+  
+  if (card.color === 'wild') {
+    // Show color picker
+    showColorPicker((color) => {
+      offlineGame.currentColor = color;
+      advanceUnoTurn();
+    });
+    return;
+  } else {
+    offlineGame.currentColor = card.color;
+  }
+  
+  // Handle special cards
+  if (card.value === 'reverse') {
+    offlineGame.direction *= -1;
+  }
+  
+  // Check win
+  if (currentPlayer.hand.length === 0) {
+    alert(`${currentPlayer.username} wins!`);
+    offlineGame.status = 'finished';
+  }
+  
+  advanceUnoTurn();
+  saveOfflineGame();
+  updateOfflineGameBoard();
+}
+
+function advanceUnoTurn() {
+  offlineGame.currentPlayerIndex = (offlineGame.currentPlayerIndex + offlineGame.direction + offlineGame.players.length) % offlineGame.players.length;
+}
+
+function showColorPicker(callback) {
+  const picker = document.getElementById('uno-color-picker');
+  if (picker) {
+    picker.style.display = 'block';
+    const colorBtns = picker.querySelectorAll('.color-btn-large');
+    colorBtns.forEach(btn => {
+      btn.onclick = () => {
+        callback(btn.dataset.color);
+        picker.style.display = 'none';
+      };
+    });
+  }
+}
+
+// Check for saved offline game on load
+if (loadOfflineGame()) {
+  showGameContainer(offlineGame.type);
+  showScreen('game');
+  updateOfflineGameBoard();
 }

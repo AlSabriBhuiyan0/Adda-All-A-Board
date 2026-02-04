@@ -1,12 +1,15 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
-const { Pool } = require('pg');
+const compression = require('compression');
+const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
+const { pool, initDatabase, redis: redisClient } = require('./db');
 
 const app = express();
 const server = http.createServer(app);
@@ -17,13 +20,26 @@ const io = new Server(server, {
   }
 });
 
+app.use(compression());
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL
+// Rate limiting (plan §9: prevent abuse and DDoS)
+const apiLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 100,
+  message: { error: 'Too many requests' },
+  standardHeaders: true
 });
+app.use('/api/', apiLimiter);
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Too many auth attempts' }
+});
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
 
 const JWT_SECRET = process.env.SESSION_SECRET;
 if (!JWT_SECRET) {
@@ -33,69 +49,6 @@ const SECRET = JWT_SECRET || require('crypto').randomBytes(32).toString('hex');
 
 const activeGames = new Map();
 const waitingPlayers = new Map();
-
-async function initDatabase() {
-  const client = await pool.connect();
-  try {
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        email VARCHAR(100) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        avatar VARCHAR(20) DEFAULT 'default',
-        coins INT DEFAULT 100,
-        wins INT DEFAULT 0,
-        games_played INT DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE TABLE IF NOT EXISTS games (
-        id UUID PRIMARY KEY,
-        game_type VARCHAR(20) NOT NULL,
-        status VARCHAR(20) DEFAULT 'waiting',
-        players JSONB DEFAULT '[]',
-        game_state JSONB DEFAULT '{}',
-        winner_id INT REFERENCES users(id),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        ended_at TIMESTAMP
-      );
-
-      CREATE TABLE IF NOT EXISTS game_history (
-        id SERIAL PRIMARY KEY,
-        game_id UUID REFERENCES games(id),
-        user_id INT REFERENCES users(id),
-        game_type VARCHAR(20) NOT NULL,
-        result VARCHAR(20),
-        score INT DEFAULT 0,
-        played_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE TABLE IF NOT EXISTS friends (
-        id SERIAL PRIMARY KEY,
-        user_id INT REFERENCES users(id),
-        friend_id INT REFERENCES users(id),
-        status VARCHAR(20) DEFAULT 'pending',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, friend_id)
-      );
-
-      CREATE TABLE IF NOT EXISTS leaderboard (
-        id SERIAL PRIMARY KEY,
-        user_id INT REFERENCES users(id) UNIQUE,
-        game_type VARCHAR(20),
-        score INT DEFAULT 0,
-        rank INT,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    console.log('Database initialized successfully');
-  } catch (err) {
-    console.error('Database initialization error:', err);
-  } finally {
-    client.release();
-  }
-}
 
 app.post('/api/auth/register', async (req, res) => {
   const { username, email, password } = req.body;
@@ -184,11 +137,87 @@ app.get('/api/auth/verify', async (req, res) => {
   }
 });
 
+// POST /auth/logout (plan §4) – optional server-side: blacklist token in Redis
+app.post('/api/auth/logout', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.json({ success: true });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.decode(token);
+    if (decoded && decoded.exp && redisClient && redisClient.getRedis()) {
+      const ttl = decoded.exp - Math.floor(Date.now() / 1000);
+      if (ttl > 0) {
+        await redisClient.getRedis().setex(`adda:logout:${token.substring(0, 32)}`, ttl, '1');
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+  res.json({ success: true });
+});
+
+// POST /auth/refresh (plan §4) – token refresh
+app.post('/api/auth/refresh', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    if (redisClient && await redisClient.isTokenBlacklisted(token)) {
+      return res.status(401).json({ error: 'Token revoked' });
+    }
+    const decoded = jwt.verify(token, SECRET);
+    const result = await pool.query(
+      'SELECT id, username, email, coins, wins, games_played, avatar FROM users WHERE id = $1',
+      [decoded.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    const user = result.rows[0];
+    const newToken = jwt.sign({ userId: user.id, username: user.username }, SECRET, { expiresIn: '7d' });
+    res.json({ user, token: newToken });
+  } catch (err) {
+    res.status(401).json({ error: 'Invalid or expired token' });
+  }
+});
+
 app.get('/api/leaderboard', async (req, res) => {
   try {
+    const gameType = req.query.game_type || null;
+    const friendsOnly = req.query.friends_only === 'true' || req.query.friends_only === '1';
+    const authHeader = req.headers.authorization;
+
+    if (friendsOnly && authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      try {
+        const decoded = jwt.verify(token, SECRET);
+        const result = await pool.query(
+          `SELECT u.id, u.username, u.wins, u.games_played, u.avatar
+           FROM users u
+           INNER JOIN friends f ON (f.friend_id = u.id AND f.user_id = $1) OR (f.user_id = u.id AND f.friend_id = $1)
+           WHERE f.status = 'accepted'
+           ORDER BY u.wins DESC
+           LIMIT 50`,
+          [decoded.userId]
+        );
+        return res.json(result.rows);
+      } catch (e) {
+        // fall through to global
+      }
+    }
+
+    const cached = redisClient && !friendsOnly && await redisClient.getLeaderboardCache(gameType);
+    if (cached) {
+      return res.json(cached);
+    }
     const result = await pool.query(
       'SELECT id, username, wins, games_played, avatar FROM users ORDER BY wins DESC LIMIT 50'
     );
+    if (redisClient && !friendsOnly) await redisClient.setLeaderboardCache(gameType, result.rows);
     res.json(result.rows);
   } catch (err) {
     console.error('Leaderboard error:', err);
@@ -216,6 +245,632 @@ app.get('/api/games/active', async (req, res) => {
   }
 });
 
+// GET /games/{gameId} (plan §4) – retrieve game details
+app.get('/api/games/:gameId', async (req, res) => {
+  try {
+    const { gameId } = req.params;
+    const game = activeGames.get(gameId);
+    if (game) {
+      return res.json({
+        id: gameId,
+        type: game.type,
+        status: game.status,
+        players: game.players.length,
+        maxPlayers: game.maxPlayers,
+        host: game.players[0]?.username,
+        gameState: game.getState()
+      });
+    }
+    const row = await pool.query(
+      'SELECT id, game_type, status, players, game_state, winner_id, created_at, ended_at FROM games WHERE id = $1',
+      [gameId]
+    );
+    if (row.rows.length === 0) {
+      return res.status(404).json({ error: 'Game not found' });
+    }
+    const g = row.rows[0];
+    res.json({
+      id: g.id,
+      type: g.game_type,
+      status: g.status,
+      players: g.players,
+      gameState: g.game_state,
+      winnerId: g.winner_id,
+      createdAt: g.created_at,
+      endedAt: g.ended_at
+    });
+  } catch (err) {
+    console.error('Get game error:', err);
+    res.status(500).json({ error: 'Failed to fetch game' });
+  }
+});
+
+// Friend System API Endpoints
+app.get('/api/friends', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, SECRET);
+    const result = await pool.query(
+      `SELECT f.id, f.status, f.created_at,
+              u.id as friend_id, u.username, u.avatar, u.wins, u.games_played
+       FROM friends f
+       JOIN users u ON (f.friend_id = u.id AND f.user_id = $1) OR (f.user_id = u.id AND f.friend_id = $1)
+       WHERE (f.user_id = $1 OR f.friend_id = $1) AND f.status = 'accepted'
+       ORDER BY u.username`,
+      [decoded.userId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Friends list error:', err);
+    res.status(500).json({ error: 'Failed to fetch friends' });
+  }
+});
+
+app.get('/api/friends/pending', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, SECRET);
+    const result = await pool.query(
+      `SELECT f.id, f.status, f.created_at,
+              u.id as friend_id, u.username, u.avatar
+       FROM friends f
+       JOIN users u ON f.user_id = u.id
+       WHERE f.friend_id = $1 AND f.status = 'pending'`,
+      [decoded.userId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Pending friends error:', err);
+    res.status(500).json({ error: 'Failed to fetch pending requests' });
+  }
+});
+
+app.post('/api/friends/add', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  const { username } = req.body;
+
+  if (!username) {
+    return res.status(400).json({ error: 'Username required' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, SECRET);
+    const userId = decoded.userId;
+
+    // Find user by username
+    const userResult = await pool.query('SELECT id FROM users WHERE username = $1', [username]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const friendId = userResult.rows[0].id;
+
+    if (userId === friendId) {
+      return res.status(400).json({ error: 'Cannot add yourself as friend' });
+    }
+
+    // Check if friendship already exists
+    const existingResult = await pool.query(
+      'SELECT * FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
+      [userId, friendId]
+    );
+
+    if (existingResult.rows.length > 0) {
+      const existing = existingResult.rows[0];
+      if (existing.status === 'accepted') {
+        return res.status(400).json({ error: 'Already friends' });
+      }
+      if (existing.status === 'pending' && existing.user_id === userId) {
+        return res.status(400).json({ error: 'Friend request already sent' });
+      }
+    }
+
+    // Create friend request
+    await pool.query(
+      'INSERT INTO friends (user_id, friend_id, status) VALUES ($1, $2, $3)',
+      [userId, friendId, 'pending']
+    );
+
+    res.json({ success: true, message: 'Friend request sent' });
+  } catch (err) {
+    console.error('Add friend error:', err);
+    res.status(500).json({ error: 'Failed to send friend request' });
+  }
+});
+
+app.post('/api/friends/accept', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  const { friendId } = req.body;
+
+  if (!friendId) {
+    return res.status(400).json({ error: 'Friend ID required' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, SECRET);
+    const userId = decoded.userId;
+
+    const result = await pool.query(
+      'UPDATE friends SET status = $1 WHERE user_id = $2 AND friend_id = $3 AND status = $4',
+      ['accepted', friendId, userId, 'pending']
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Friend request not found' });
+    }
+
+    res.json({ success: true, message: 'Friend request accepted' });
+  } catch (err) {
+    console.error('Accept friend error:', err);
+    res.status(500).json({ error: 'Failed to accept friend request' });
+  }
+});
+
+app.post('/api/friends/reject', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  const { friendId } = req.body;
+
+  if (!friendId) {
+    return res.status(400).json({ error: 'Friend ID required' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, SECRET);
+    const userId = decoded.userId;
+
+    await pool.query(
+      'DELETE FROM friends WHERE user_id = $2 AND friend_id = $3 AND status = $4',
+      [friendId, userId, 'pending']
+    );
+
+    res.json({ success: true, message: 'Friend request rejected' });
+  } catch (err) {
+    console.error('Reject friend error:', err);
+    res.status(500).json({ error: 'Failed to reject friend request' });
+  }
+});
+
+app.post('/api/friends/remove', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  const { friendId } = req.body;
+
+  if (!friendId) {
+    return res.status(400).json({ error: 'Friend ID required' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, SECRET);
+    const userId = decoded.userId;
+
+    await pool.query(
+      'DELETE FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
+      [userId, friendId]
+    );
+
+    res.json({ success: true, message: 'Friend removed' });
+  } catch (err) {
+    console.error('Remove friend error:', err);
+    res.status(500).json({ error: 'Failed to remove friend' });
+  }
+});
+
+app.get('/api/profile/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const result = await pool.query(
+      `SELECT id, username, email, avatar, coins, wins, games_played, created_at
+       FROM users WHERE id = $1`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Get game history stats
+    const statsResult = await pool.query(
+      `SELECT game_type, COUNT(*) as games, 
+              SUM(CASE WHEN result = 'win' THEN 1 ELSE 0 END) as wins
+       FROM game_history WHERE user_id = $1 GROUP BY game_type`,
+      [userId]
+    );
+
+    const user = result.rows[0];
+    user.stats = statsResult.rows;
+
+    res.json(user);
+  } catch (err) {
+    console.error('Profile error:', err);
+    res.status(500).json({ error: 'Failed to fetch profile' });
+  }
+});
+
+app.post('/api/user/add-coins', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  const { amount } = req.body;
+
+  try {
+    const decoded = jwt.verify(token, SECRET);
+    const result = await pool.query(
+      'UPDATE users SET coins = coins + $1 WHERE id = $2 RETURNING coins',
+      [amount || 10, decoded.userId]
+    );
+
+    res.json({ success: true, coins: result.rows[0].coins });
+  } catch (err) {
+    console.error('Add coins error:', err);
+    res.status(500).json({ error: 'Failed to add coins' });
+  }
+});
+
+app.get('/api/games/history/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const result = await pool.query(
+      `SELECT gh.game_type, gh.result, gh.played_at, g.id as game_id
+       FROM game_history gh
+       LEFT JOIN games g ON gh.game_id = g.id
+       WHERE gh.user_id = $1
+       ORDER BY gh.played_at DESC
+       LIMIT 50`,
+      [userId]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Game history error:', err);
+    res.status(500).json({ error: 'Failed to fetch game history' });
+  }
+});
+
+// In-App Purchases Endpoints
+const SHOP_ITEMS = {
+  themes: {
+    'ludo-candy': { name: 'Candy Theme', price: 50, game: 'ludo' },
+    'ludo-pirate': { name: 'Pirate Theme', price: 50, game: 'ludo' },
+    'ludo-christmas': { name: 'Christmas Theme', price: 75, game: 'ludo' },
+    'monopoly-classic': { name: 'Classic Monopoly Theme', price: 100, game: 'monopoly' },
+    'uno-rainbow': { name: 'Rainbow UNO Theme', price: 60, game: 'uno' }
+  },
+  cosmetics: {
+    'avatar-frame-gold': { name: 'Gold Avatar Frame', price: 200 },
+    'avatar-frame-silver': { name: 'Silver Avatar Frame', price: 150 },
+    'dice-skin-premium': { name: 'Premium Dice Skin', price: 100 }
+  }
+};
+
+app.get('/api/shop', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, SECRET);
+    
+    // Get user's purchases
+    const purchasesResult = await pool.query(
+      'SELECT item_type, item_id FROM in_app_purchases WHERE user_id = $1',
+      [decoded.userId]
+    );
+    
+    const purchasedItems = new Set();
+    purchasesResult.rows.forEach(row => {
+      purchasedItems.add(`${row.item_type}:${row.item_id}`);
+    });
+    
+    // Mark items as purchased
+    const shopItems = {
+      themes: Object.entries(SHOP_ITEMS.themes).map(([id, item]) => ({
+        id,
+        ...item,
+        purchased: purchasedItems.has(`themes:${id}`)
+      })),
+      cosmetics: Object.entries(SHOP_ITEMS.cosmetics).map(([id, item]) => ({
+        id,
+        ...item,
+        purchased: purchasedItems.has(`cosmetics:${id}`)
+      }))
+    };
+    
+    res.json(shopItems);
+  } catch (err) {
+    console.error('Shop error:', err);
+    res.status(500).json({ error: 'Failed to fetch shop items' });
+  }
+});
+
+app.post('/api/shop/purchase', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  const { itemType, itemId } = req.body;
+
+  if (!itemType || !itemId) {
+    return res.status(400).json({ error: 'Item type and ID required' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, SECRET);
+    const userId = decoded.userId;
+    
+    // Find item
+    const item = SHOP_ITEMS[itemType]?.[itemId];
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+    
+    // Check if already purchased
+    const existingPurchase = await pool.query(
+      'SELECT id FROM in_app_purchases WHERE user_id = $1 AND item_type = $2 AND item_id = $3',
+      [userId, itemType, itemId]
+    );
+    
+    if (existingPurchase.rows.length > 0) {
+      return res.status(400).json({ error: 'Item already purchased' });
+    }
+    
+    // Check user coins
+    const userResult = await pool.query(
+      'SELECT coins FROM users WHERE id = $1',
+      [userId]
+    );
+    
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const userCoins = userResult.rows[0].coins;
+    if (userCoins < item.price) {
+      return res.status(400).json({ error: 'Insufficient coins' });
+    }
+    
+    // Process purchase
+    await pool.query('BEGIN');
+    
+    try {
+      // Deduct coins
+      await pool.query(
+        'UPDATE users SET coins = coins - $1 WHERE id = $2',
+        [item.price, userId]
+      );
+      
+      // Record purchase
+      await pool.query(
+        'INSERT INTO in_app_purchases (user_id, item_type, item_id, item_name, price) VALUES ($1, $2, $3, $4, $5)',
+        [userId, itemType, itemId, item.name, item.price]
+      );
+      
+      await pool.query('COMMIT');
+      
+      // Get updated user
+      const updatedUser = await pool.query(
+        'SELECT coins FROM users WHERE id = $1',
+        [userId]
+      );
+      
+      res.json({
+        success: true,
+        message: 'Purchase successful',
+        remainingCoins: updatedUser.rows[0].coins
+      });
+    } catch (err) {
+      await pool.query('ROLLBACK');
+      throw err;
+    }
+  } catch (err) {
+    console.error('Purchase error:', err);
+    res.status(500).json({ error: 'Failed to process purchase' });
+  }
+});
+
+// Save/Resume Game Endpoints
+app.post('/api/games/:gameId/save', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  const { gameId } = req.params;
+
+  try {
+    const decoded = jwt.verify(token, SECRET);
+    const game = activeGames.get(gameId);
+    
+    if (!game) {
+      return res.status(404).json({ error: 'Game not found' });
+    }
+
+    // Check if user is in the game
+    const playerInGame = game.players.find(p => p.id === decoded.userId);
+    if (!playerInGame) {
+      return res.status(403).json({ error: 'Not a player in this game' });
+    }
+
+    // Save game state to database
+    await pool.query(
+      `INSERT INTO games (id, game_type, status, players, game_state, host_id, saved_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       ON CONFLICT (id) DO UPDATE SET 
+         status = $3,
+         players = $4,
+         game_state = $5,
+         saved_at = NOW()`,
+      [
+        gameId,
+        game.type,
+        'saved',
+        JSON.stringify(game.players.map(p => ({ id: p.id, username: p.username }))),
+        JSON.stringify(game.getState()),
+        game.players[0]?.id
+      ]
+    );
+
+    res.json({ success: true, message: 'Game saved' });
+  } catch (err) {
+    console.error('Save game error:', err);
+    res.status(500).json({ error: 'Failed to save game' });
+  }
+});
+
+app.get('/api/games/saved', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  try {
+    const decoded = jwt.verify(token, SECRET);
+    const result = await pool.query(
+      `SELECT id, game_type, status, players, game_state, saved_at, host_id
+       FROM games 
+       WHERE status = 'saved' 
+       AND (players::jsonb @> $1::jsonb OR host_id = $2)
+       ORDER BY saved_at DESC`,
+      [JSON.stringify([{ id: decoded.userId }]), decoded.userId]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get saved games error:', err);
+    res.status(500).json({ error: 'Failed to fetch saved games' });
+  }
+});
+
+app.post('/api/games/:gameId/resume', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  const { gameId } = req.params;
+
+  try {
+    const decoded = jwt.verify(token, SECRET);
+    const result = await pool.query(
+      'SELECT * FROM games WHERE id = $1 AND status = $2',
+      [gameId, 'saved']
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Saved game not found' });
+    }
+
+    const savedGame = result.rows[0];
+    const gameState = JSON.parse(savedGame.game_state);
+    const players = JSON.parse(savedGame.players);
+
+    // Check if user is in the game
+    const playerInGame = players.find(p => p.id === decoded.userId);
+    if (!playerInGame) {
+      return res.status(403).json({ error: 'Not a player in this game' });
+    }
+
+    // Restore game to activeGames
+    let game;
+    if (savedGame.game_type === 'ludo') {
+      game = new LudoGame(gameId);
+    } else if (savedGame.game_type === 'monopoly') {
+      game = new MonopolyGame(gameId);
+    } else if (savedGame.game_type === 'uno') {
+      game = new UnoGame(gameId);
+    }
+
+    // Restore game state
+    game.status = 'playing';
+    game.players = players.map(p => ({
+      ...p,
+      socketId: null // Will be set when players reconnect
+    }));
+    game.currentPlayerIndex = gameState.currentPlayerIndex || 0;
+
+    // Restore game-specific state
+    if (savedGame.game_type === 'ludo') {
+      game.board = gameState.board || game.initBoard();
+      game.diceValue = gameState.diceValue;
+    } else if (savedGame.game_type === 'monopoly') {
+      game.board = gameState.board || game.initBoard();
+      game.diceValue = gameState.diceValue || [0, 0];
+      game.players.forEach((p, idx) => {
+        const savedPlayer = gameState.players?.[idx];
+        if (savedPlayer) {
+          p.position = savedPlayer.position;
+          p.money = savedPlayer.money;
+          p.properties = savedPlayer.properties || [];
+          p.inJail = savedPlayer.inJail || false;
+        }
+      });
+    } else if (savedGame.game_type === 'uno') {
+      game.deck = gameState.deck || [];
+      game.discardPile = gameState.discardPile || [];
+      game.currentColor = gameState.currentColor;
+      game.direction = gameState.direction || 1;
+      game.players.forEach((p, idx) => {
+        const savedPlayer = gameState.players?.[idx];
+        if (savedPlayer && savedPlayer.hand) {
+          p.hand = savedPlayer.hand;
+        }
+      });
+    }
+
+    activeGames.set(gameId, game);
+
+    // Update database status
+    await pool.query(
+      'UPDATE games SET status = $1, saved_at = NULL WHERE id = $2',
+      ['playing', gameId]
+    );
+
+    res.json({ success: true, gameState: game.getState() });
+  } catch (err) {
+    console.error('Resume game error:', err);
+    res.status(500).json({ error: 'Failed to resume game' });
+  }
+});
+
 class LudoGame {
   constructor(gameId) {
     this.gameId = gameId;
@@ -227,6 +882,9 @@ class LudoGame {
     this.type = 'ludo';
     this.board = this.initBoard();
     this.colors = ['red', 'blue', 'green', 'yellow'];
+    this.turnTimeout = null;
+    this.turnStartTime = null;
+    this.turnTimeoutDuration = 60000; // 60 seconds
   }
 
   initBoard() {
@@ -264,9 +922,36 @@ class LudoGame {
     if (this.players.length >= 2) {
       this.status = 'playing';
       this.currentPlayerIndex = 0;
+      this.startTurnTimer();
       return true;
     }
     return false;
+  }
+
+  startTurnTimer() {
+    if (this.turnTimeout) {
+      clearTimeout(this.turnTimeout);
+    }
+    this.turnStartTime = Date.now();
+    this.turnTimeout = setTimeout(() => {
+      this.handleTurnTimeout();
+    }, this.turnTimeoutDuration);
+  }
+
+  handleTurnTimeout() {
+    if (this.status !== 'playing') return;
+    
+    // Auto-advance turn
+    this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
+    this.diceValue = null;
+    
+    // Notify players
+    io.to(this.gameId).emit('turn_timeout', {
+      skippedPlayerIndex: (this.currentPlayerIndex - 1 + this.players.length) % this.players.length,
+      gameState: this.getState()
+    });
+    
+    this.startTurnTimer();
   }
 
   rollDice() {
@@ -332,6 +1017,7 @@ class LudoGame {
 
     if (this.diceValue !== 6 && !captured) {
       this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
+      this.startTurnTimer();
     }
 
     this.diceValue = null;
@@ -371,6 +1057,9 @@ class MonopolyGame {
     this.tokens = ['car', 'hat', 'dog', 'ship', 'boot', 'thimble'];
     this.chanceCards = this.initChanceCards();
     this.chestCards = this.initChestCards();
+    this.turnTimeout = null;
+    this.turnStartTime = null;
+    this.turnTimeoutDuration = 90000; // 90 seconds for Monopoly
   }
 
   initChanceCards() {
@@ -481,9 +1170,36 @@ class MonopolyGame {
     if (this.players.length >= 2) {
       this.status = 'playing';
       this.currentPlayerIndex = 0;
+      this.startTurnTimer();
       return true;
     }
     return false;
+  }
+
+  startTurnTimer() {
+    if (this.turnTimeout) {
+      clearTimeout(this.turnTimeout);
+    }
+    this.turnStartTime = Date.now();
+    this.turnTimeout = setTimeout(() => {
+      this.handleTurnTimeout();
+    }, this.turnTimeoutDuration);
+  }
+
+  handleTurnTimeout() {
+    if (this.status !== 'playing') return;
+    
+    // Auto-advance turn
+    this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
+    this.diceValue = [0, 0];
+    
+    // Notify players
+    io.to(this.gameId).emit('turn_timeout', {
+      skippedPlayerIndex: (this.currentPlayerIndex - 1 + this.players.length) % this.players.length,
+      gameState: this.getState()
+    });
+    
+    this.startTurnTimer();
   }
 
   rollDice() {
@@ -534,6 +1250,7 @@ class MonopolyGame {
 
     if (this.diceValue[0] !== this.diceValue[1]) {
       this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
+      this.startTurnTimer();
     }
 
     if (player.money < 0) {
@@ -624,6 +1341,9 @@ class UnoGame {
     this.deck = [];
     this.discardPile = [];
     this.currentColor = null;
+    this.turnTimeout = null;
+    this.turnStartTime = null;
+    this.turnTimeoutDuration = 45000; // 45 seconds for UNO
   }
 
   initDeck() {
@@ -696,9 +1416,41 @@ class UnoGame {
       
       this.status = 'playing';
       this.currentPlayerIndex = 0;
+      this.startTurnTimer();
       return true;
     }
     return false;
+  }
+
+  startTurnTimer() {
+    if (this.turnTimeout) {
+      clearTimeout(this.turnTimeout);
+    }
+    this.turnStartTime = Date.now();
+    this.turnTimeout = setTimeout(() => {
+      this.handleTurnTimeout();
+    }, this.turnTimeoutDuration);
+  }
+
+  handleTurnTimeout() {
+    if (this.status !== 'playing') return;
+    
+    // Auto-draw a card and advance turn
+    const player = this.players[this.currentPlayerIndex];
+    if (this.deck.length === 0) this.reshuffleDeck();
+    if (this.deck.length > 0) {
+      player.hand.push(this.deck.pop());
+    }
+    
+    this.currentPlayerIndex = (this.currentPlayerIndex + this.direction + this.players.length) % this.players.length;
+    
+    // Notify players
+    io.to(this.gameId).emit('turn_timeout', {
+      skippedPlayerIndex: (this.currentPlayerIndex - 1 + this.players.length) % this.players.length,
+      gameState: this.getState()
+    });
+    
+    this.startTurnTimer();
   }
 
   canPlayCard(card) {
@@ -778,6 +1530,7 @@ class UnoGame {
     
     if (!this.canPlayCard(card)) {
       this.currentPlayerIndex = (this.currentPlayerIndex + this.direction + this.players.length) % this.players.length;
+      this.startTurnTimer();
     }
     
     return { success: true, card, canPlay: this.canPlayCard(card) };
@@ -841,10 +1594,67 @@ io.on('connection', (socket) => {
       if (result.rows.length > 0) {
         currentUser = { ...result.rows[0], socketId: socket.id };
         socket.emit('authenticated', currentUser);
+        
+        // Check for active games this user was in
+        const activeGameIds = [];
+        activeGames.forEach((game, gameId) => {
+          const playerInGame = game.players.find(p => p.id === currentUser.id);
+          if (playerInGame) {
+            // Update socket ID for reconnection
+            playerInGame.socketId = socket.id;
+            activeGameIds.push(gameId);
+            socket.join(gameId);
+            // Send current game state
+            socket.emit('game_state', game.getState());
+          }
+        });
+        
+        if (activeGameIds.length > 0) {
+          socket.emit('reconnected_to_games', activeGameIds);
+        }
       }
     } catch (err) {
       socket.emit('auth_error', 'Invalid token');
     }
+  });
+
+  socket.on('reconnect_to_game', (gameId) => {
+    if (!currentUser) {
+      socket.emit('error', 'Not authenticated');
+      return;
+    }
+
+    const game = activeGames.get(gameId);
+    if (!game) {
+      socket.emit('error', 'Game not found');
+      return;
+    }
+
+    const playerInGame = game.players.find(p => p.id === currentUser.id);
+    if (!playerInGame) {
+      socket.emit('error', 'Not a player in this game');
+      return;
+    }
+
+    // Update socket ID
+    playerInGame.socketId = socket.id;
+    currentGameId = gameId;
+    if (redisClient) redisClient.setUserActiveGame(currentUser.id, gameId);
+    socket.join(gameId);
+    
+    // Send current game state
+    const state = game.getState();
+    if (game.type === 'uno') {
+      state.hand = game.getPlayerHand(currentUser.id);
+    }
+    socket.emit('game_state', state);
+    
+    // Notify other players
+    socket.to(gameId).emit('player_reconnected', {
+      playerId: currentUser.id,
+      username: currentUser.username,
+      gameState: state
+    });
   });
 
   socket.on('create_game', (gameType) => {
@@ -870,7 +1680,7 @@ io.on('connection', (socket) => {
     game.addPlayer(currentUser);
     activeGames.set(gameId, game);
     currentGameId = gameId;
-    
+    if (redisClient) redisClient.setUserActiveGame(currentUser.id, gameId);
     socket.join(gameId);
     socket.emit('game_created', game.getState());
     io.emit('games_updated', getActiveGamesList());
@@ -899,6 +1709,7 @@ io.on('connection', (socket) => {
     }
 
     currentGameId = gameId;
+    if (redisClient) redisClient.setUserActiveGame(currentUser.id, gameId);
     socket.join(gameId);
     io.to(gameId).emit('game_state', game.getState());
     io.emit('games_updated', getActiveGamesList());
@@ -914,6 +1725,7 @@ io.on('connection', (socket) => {
       if (game.type === gameType && game.status === 'waiting' && game.players.length < game.maxPlayers) {
         game.addPlayer(currentUser);
         currentGameId = gameId;
+        if (redisClient) redisClient.setUserActiveGame(currentUser.id, gameId);
         socket.join(gameId);
         const state = game.getState();
         if (game.type === 'uno') {
@@ -942,7 +1754,7 @@ io.on('connection', (socket) => {
     game.addPlayer(currentUser);
     activeGames.set(gameId, game);
     currentGameId = gameId;
-    
+    if (redisClient) redisClient.setUserActiveGame(currentUser.id, gameId);
     socket.join(gameId);
     socket.emit('game_created', game.getState());
     io.emit('games_updated', getActiveGamesList());
@@ -1048,12 +1860,17 @@ io.on('connection', (socket) => {
 
     if (game.status === 'finished') {
       const winner = game.players.find(p => !p.bankrupt);
-      io.to(currentGameId).emit('game_over', { winner, gameState: game.getState() });
-      updatePlayerStats(winner.id, true);
-      game.players.forEach(p => {
-        if (p.id !== winner.id) updatePlayerStats(p.id, false);
-      });
-      saveGameHistory(currentGameId, game, winner.id);
+      if (winner) {
+        io.to(currentGameId).emit('game_over', { winner, gameState: game.getState() });
+        updatePlayerStats(winner.id, true);
+        game.players.forEach(p => {
+          if (p.id !== winner.id) updatePlayerStats(p.id, false);
+        });
+        saveGameHistory(currentGameId, game, winner.id);
+      } else {
+        console.error('Game finished but no winner found');
+        io.to(currentGameId).emit('game_over', { winner: null, gameState: game.getState() });
+      }
     }
   });
 
@@ -1201,20 +2018,29 @@ io.on('connection', (socket) => {
   });
 
   socket.on('monopoly_buy_building', (propertyId) => {
+    try {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/85d4d97e-6e72-4c83-83cb-0bd0ffb003dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server/index.js:monopoly_buy_building:entry',message:'monopoly_buy_building entry',data:{currentGameId,propertyId,gameType:activeGames.get(currentGameId)?.type,hasGame:!!activeGames.get(currentGameId)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
     if (!currentGameId || !currentUser) return;
     const game = activeGames.get(currentGameId);
     if (!game || game.type !== 'monopoly') return;
 
-    const property = game.properties.find(p => p.id === propertyId);
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/85d4d97e-6e72-4c83-83cb-0bd0ffb003dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server/index.js:before_properties_find',message:'before game.board.properties find',data:{hasGameProperties:typeof game.properties!=='undefined',hasBoardProperties:!!(game.board&&game.board.properties)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1',runId:'post-fix'})}).catch(()=>{});
+    // #endregion
+    const property = game.board.properties.find(p => p.id === propertyId);
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/85d4d97e-6e72-4c83-83cb-0bd0ffb003dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server/index.js:after_properties_find',message:'after property find',data:{propertyFound:!!property,propertyId:property?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1',runId:'post-fix'})}).catch(()=>{});
+    // #endregion
     if (!property || property.owner !== currentUser.id) return;
 
     const player = game.players.find(p => p.id === currentUser.id);
     if (!player) return;
 
-    const propData = game.board[propertyId];
-    if (!propData || propData.type !== 'property') return;
+    if (property.type !== 'property') return;
 
-    const houseCost = propData.price / 2;
+    const houseCost = property.price / 2;
     const currentHouses = property.houses || 0;
 
     if (currentHouses >= 5 || player.money < houseCost) return;
@@ -1227,6 +2053,12 @@ io.on('connection', (socket) => {
       houses: property.houses,
       gameState: game.getState()
     });
+    } catch (err) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/85d4d97e-6e72-4c83-83cb-0bd0ffb003dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server/index.js:monopoly_buy_building:catch',message:'monopoly_buy_building threw',data:{errName:err.name,errMessage:err.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+      // #endregion
+      socket.emit('error', err.message || 'Failed to buy building');
+    }
   });
 
   socket.on('leave_game', () => {
@@ -1245,6 +2077,7 @@ io.on('connection', (socket) => {
         }
         io.emit('games_updated', getActiveGamesList());
       }
+      if (currentUser && redisClient) redisClient.setUserActiveGame(currentUser.id, null);
       currentGameId = null;
     }
   });
@@ -1288,11 +2121,27 @@ async function updatePlayerStats(userId, won) {
 
 async function saveGameHistory(gameId, game, winnerId) {
   try {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/85d4d97e-6e72-4c83-83cb-0bd0ffb003dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server/index.js:saveGameHistory:entry',message:'saveGameHistory entry',data:{gameType:game.type,playerCount:game.players.length,firstPlayerHasColor:game.players[0]?.color!==undefined,firstPlayerHasToken:game.players[0]?.token!==undefined},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
+    // Map players with game-type-specific fields
+    const playersData = game.players.map(p => {
+      const base = { id: p.id, username: p.username };
+      if (game.type === 'ludo' && p.color) {
+        base.color = p.color;
+      } else if (game.type === 'monopoly' && p.token) {
+        base.token = p.token;
+      }
+      return base;
+    });
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/85d4d97e-6e72-4c83-83cb-0bd0ffb003dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server/index.js:saveGameHistory:before_query',message:'before query with mapped players',data:{playersDataLength:playersData.length,firstPlayerData:playersData[0]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
     await pool.query(
       `INSERT INTO games (id, game_type, status, players, game_state, winner_id, ended_at)
        VALUES ($1, $2, 'finished', $3, $4, $5, NOW())
        ON CONFLICT (id) DO UPDATE SET status = 'finished', winner_id = $5, ended_at = NOW()`,
-      [gameId, game.type, JSON.stringify(game.players.map(p => ({ id: p.id, username: p.username, color: p.color }))), JSON.stringify(game.getState()), winnerId]
+      [gameId, game.type, JSON.stringify(playersData), JSON.stringify(game.getState()), winnerId]
     );
 
     for (const player of game.players) {
@@ -1303,6 +2152,7 @@ async function saveGameHistory(gameId, game, winnerId) {
         [gameId, player.id, game.type, result]
       );
     }
+    if (redisClient) await redisClient.invalidateLeaderboardCache(game.type);
   } catch (err) {
     console.error('Error saving game history:', err);
   }
@@ -1324,10 +2174,112 @@ function getActiveGamesList() {
   return games;
 }
 
-const PORT = 5000;
+// REST game endpoints (plan §4) – POST /games/create, /games/:id/join, /games/:id/leave
+async function getUserFromAuth(req, res) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'No token provided' });
+    return null;
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, SECRET);
+    const result = await pool.query(
+      'SELECT id, username, avatar, coins, wins FROM users WHERE id = $1',
+      [decoded.userId]
+    );
+    if (result.rows.length === 0) {
+      res.status(401).json({ error: 'User not found' });
+      return null;
+    }
+    return { ...result.rows[0], socketId: null };
+  } catch (err) {
+    res.status(401).json({ error: 'Invalid token' });
+    return null;
+  }
+}
 
-initDatabase().then(() => {
+app.post('/api/games/create', async (req, res) => {
+  const user = await getUserFromAuth(req, res);
+  if (!user) return;
+  const { gameType } = req.body;
+  if (!gameType || !['ludo', 'monopoly', 'uno'].includes(gameType)) {
+    return res.status(400).json({ error: 'Invalid gameType. Use ludo, monopoly, or uno' });
+  }
+  const gameId = uuidv4();
+  let game;
+  if (gameType === 'ludo') {
+    game = new LudoGame(gameId);
+  } else if (gameType === 'monopoly') {
+    game = new MonopolyGame(gameId);
+  } else {
+    game = new UnoGame(gameId);
+  }
+  game.addPlayer(user);
+  activeGames.set(gameId, game);
+  if (redisClient) redisClient.setUserActiveGame(user.id, gameId);
+  io.emit('games_updated', getActiveGamesList());
+  res.status(201).json({ gameId, gameState: game.getState() });
+});
+
+app.post('/api/games/:gameId/join', async (req, res) => {
+  const user = await getUserFromAuth(req, res);
+  if (!user) return;
+  const { gameId } = req.params;
+  const game = activeGames.get(gameId);
+  if (!game) {
+    return res.status(404).json({ error: 'Game not found' });
+  }
+  if (game.status !== 'waiting') {
+    return res.status(400).json({ error: 'Game already started' });
+  }
+  if (!game.addPlayer(user)) {
+    return res.status(400).json({ error: 'Game is full' });
+  }
+  if (redisClient) redisClient.setUserActiveGame(user.id, gameId);
+  io.to(gameId).emit('game_state', game.getState());
+  io.emit('games_updated', getActiveGamesList());
+  res.json({ gameId, gameState: game.getState() });
+});
+
+app.post('/api/games/:gameId/leave', async (req, res) => {
+  const user = await getUserFromAuth(req, res);
+  if (!user) return;
+  const { gameId } = req.params;
+  const game = activeGames.get(gameId);
+  if (!game) {
+    return res.status(404).json({ error: 'Game not found' });
+  }
+  const idx = game.players.findIndex(p => p.id === user.id);
+  if (idx !== -1) {
+    game.players.splice(idx, 1);
+    if (game.currentPlayerIndex >= game.players.length) {
+      game.currentPlayerIndex = 0;
+    }
+  } else {
+    game.removePlayer(user.socketId);
+  }
+  if (game.players.length === 0) {
+    activeGames.delete(gameId);
+  } else {
+    io.to(gameId).emit('player_left', { gameState: game.getState() });
+  }
+  if (redisClient) redisClient.setUserActiveGame(user.id, null);
+  io.emit('games_updated', getActiveGamesList());
+  res.json({ success: true });
+});
+
+const PORT = process.env.PORT || 5000;
+
+async function start() {
+  await initDatabase();
+  await redisClient.connectRedis();
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
   });
+}
+
+start().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });
