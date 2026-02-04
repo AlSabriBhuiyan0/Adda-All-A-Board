@@ -4,6 +4,70 @@ let currentUser = null;
 let currentGame = null;
 let authToken = localStorage.getItem('gameToken');
 let selectedTheme = localStorage.getItem('gameTheme') || 'classic';
+let ownedDeeds = [];
+
+const MONOPOLY_PROPERTIES = [
+  { id: 0, name: 'GO', type: 'go', price: 0 },
+  { id: 1, name: 'Mediterranean Ave', type: 'property', color: 'brown', price: 60 },
+  { id: 2, name: 'Community Chest', type: 'chest', price: 0 },
+  { id: 3, name: 'Baltic Ave', type: 'property', color: 'brown', price: 60 },
+  { id: 4, name: 'Income Tax', type: 'tax', price: 200 },
+  { id: 5, name: 'Reading Railroad', type: 'railroad', price: 200 },
+  { id: 6, name: 'Oriental Ave', type: 'property', color: 'lightblue', price: 100 },
+  { id: 7, name: 'Chance', type: 'chance', price: 0 },
+  { id: 8, name: 'Vermont Ave', type: 'property', color: 'lightblue', price: 100 },
+  { id: 9, name: 'Connecticut Ave', type: 'property', color: 'lightblue', price: 120 },
+  { id: 10, name: 'Jail', type: 'jail', price: 0 },
+  { id: 11, name: 'St. Charles Place', type: 'property', color: 'pink', price: 140 },
+  { id: 12, name: 'Electric Company', type: 'utility', price: 150 },
+  { id: 13, name: 'States Ave', type: 'property', color: 'pink', price: 140 },
+  { id: 14, name: 'Virginia Ave', type: 'property', color: 'pink', price: 160 },
+  { id: 15, name: 'Pennsylvania Railroad', type: 'railroad', price: 200 },
+  { id: 16, name: 'St. James Place', type: 'property', color: 'orange', price: 180 },
+  { id: 17, name: 'Community Chest', type: 'chest', price: 0 },
+  { id: 18, name: 'Tennessee Ave', type: 'property', color: 'orange', price: 180 },
+  { id: 19, name: 'New York Ave', type: 'property', color: 'orange', price: 200 },
+  { id: 20, name: 'Free Parking', type: 'parking', price: 0 },
+  { id: 21, name: 'Kentucky Ave', type: 'property', color: 'red', price: 220 },
+  { id: 22, name: 'Chance', type: 'chance', price: 0 },
+  { id: 23, name: 'Indiana Ave', type: 'property', color: 'red', price: 220 },
+  { id: 24, name: 'Illinois Ave', type: 'property', color: 'red', price: 240 },
+  { id: 25, name: 'B&O Railroad', type: 'railroad', price: 200 },
+  { id: 26, name: 'Atlantic Ave', type: 'property', color: 'yellow', price: 260 },
+  { id: 27, name: 'Ventnor Ave', type: 'property', color: 'yellow', price: 260 },
+  { id: 28, name: 'Water Works', type: 'utility', price: 150 },
+  { id: 29, name: 'Marvin Gardens', type: 'property', color: 'yellow', price: 280 },
+  { id: 30, name: 'Go To Jail', type: 'gotojail', price: 0 },
+  { id: 31, name: 'Pacific Ave', type: 'property', color: 'green', price: 300 },
+  { id: 32, name: 'North Carolina Ave', type: 'property', color: 'green', price: 300 },
+  { id: 33, name: 'Community Chest', type: 'chest', price: 0 },
+  { id: 34, name: 'Pennsylvania Ave', type: 'property', color: 'green', price: 320 },
+  { id: 35, name: 'Short Line', type: 'railroad', price: 200 },
+  { id: 36, name: 'Chance', type: 'chance', price: 0 },
+  { id: 37, name: 'Park Place', type: 'property', color: 'darkblue', price: 350 },
+  { id: 38, name: 'Luxury Tax', type: 'tax', price: 100 },
+  { id: 39, name: 'Boardwalk', type: 'property', color: 'darkblue', price: 400 }
+];
+
+const PLAYER_TOKENS = {
+  car: { icon: '🚗', name: 'Car' },
+  hat: { icon: '🎩', name: 'Top Hat' },
+  dog: { icon: '🐕', name: 'Dog' },
+  ship: { icon: '🚢', name: 'Ship' },
+  boot: { icon: '👢', name: 'Boot' },
+  thimble: { icon: '🛡️', name: 'Thimble' }
+};
+
+const PROPERTY_COLORS = {
+  brown: '#8B4513',
+  lightblue: '#87CEEB',
+  pink: '#FF69B4',
+  orange: '#FFA500',
+  red: '#FF0000',
+  yellow: '#FFFF00',
+  green: '#228B22',
+  darkblue: '#00008B'
+};
 
 function setTheme(theme) {
   selectedTheme = theme;
@@ -248,6 +312,9 @@ socket.on('monopoly_bought', (data) => {
   const passBtn = document.getElementById('monopoly-pass-btn');
   if (buyBtn) buyBtn.style.display = 'none';
   if (passBtn) passBtn.style.display = 'none';
+  if (data.property && data.buyerId === currentUser?.id) {
+    showDeedPopup(data.property);
+  }
 });
 
 socket.on('uno_card_played', (data) => {
@@ -590,11 +657,15 @@ let pendingProperty = null;
 let pendingCardIndex = null;
 
 function updateMonopolyBoard(gameState) {
+  renderMonopolySpaces(gameState);
+  renderPlayerTokensOnBoard(gameState);
+  updatePlayerDeeds(gameState);
+  
   const playersContainer = document.getElementById('monopoly-players');
   if (playersContainer) {
     playersContainer.innerHTML = gameState.players.map((player, index) => `
       <div class="monopoly-player-chip ${index === gameState.currentPlayerIndex ? 'current' : ''} ${player.bankrupt ? 'bankrupt' : ''}">
-        <div class="player-token" style="background: ${getTokenColor(player.token)}"></div>
+        <span class="token-icon">${PLAYER_TOKENS[player.token]?.icon || '🎮'}</span>
         <span>${player.username}</span>
         <span class="player-money">$${player.money}</span>
       </div>
@@ -605,7 +676,7 @@ function updateMonopolyBoard(gameState) {
   const playerInfo = document.getElementById('monopoly-player-info');
   if (myPlayer && playerInfo) {
     playerInfo.innerHTML = `
-      <div>Your money: <span class="money">$${myPlayer.money}</span> | Position: ${myPlayer.position} | Properties: ${myPlayer.properties?.length || 0}</div>
+      <div>Your money: <span class="money">$${myPlayer.money}</span> | Position: ${MONOPOLY_PROPERTIES[myPlayer.position]?.name || myPlayer.position}</div>
     `;
   }
 
@@ -624,6 +695,230 @@ function updateMonopolyBoard(gameState) {
       turnIndicator.classList.add('waiting');
     }
   }
+}
+
+function renderMonopolySpaces(gameState) {
+  const bottomSide = document.getElementById('monopoly-bottom-side');
+  const leftSide = document.getElementById('monopoly-left-side');
+  const topSide = document.getElementById('monopoly-top-side');
+  const rightSide = document.getElementById('monopoly-right-side');
+  
+  if (!bottomSide || !leftSide || !topSide || !rightSide) return;
+  
+  const bottomProps = MONOPOLY_PROPERTIES.slice(1, 10);
+  const leftProps = MONOPOLY_PROPERTIES.slice(11, 20);
+  const topProps = MONOPOLY_PROPERTIES.slice(21, 30);
+  const rightProps = MONOPOLY_PROPERTIES.slice(31, 40);
+  
+  bottomSide.innerHTML = bottomProps.map(prop => renderPropertySpace(prop, gameState, 'bottom')).join('');
+  leftSide.innerHTML = leftProps.map(prop => renderPropertySpace(prop, gameState, 'left')).join('');
+  topSide.innerHTML = topProps.reverse().map(prop => renderPropertySpace(prop, gameState, 'top')).join('');
+  rightSide.innerHTML = rightProps.map(prop => renderPropertySpace(prop, gameState, 'right')).join('');
+}
+
+function renderPropertySpace(prop, gameState, side) {
+  const owner = gameState?.properties?.find(p => p.id === prop.id)?.owner;
+  const ownerPlayer = owner ? gameState.players.find(p => p.id === owner) : null;
+  const ownerColor = ownerPlayer ? getTokenColor(ownerPlayer.token) : '';
+  
+  let colorBar = '';
+  let icon = '';
+  let priceText = '';
+  
+  if (prop.type === 'property') {
+    colorBar = `<div class="prop-color-bar" style="background: ${PROPERTY_COLORS[prop.color] || '#888'}"></div>`;
+    priceText = `<div class="prop-price">$${prop.price}</div>`;
+  } else if (prop.type === 'railroad') {
+    icon = '<div class="prop-icon">🚂</div>';
+    priceText = `<div class="prop-price">$${prop.price}</div>`;
+  } else if (prop.type === 'utility') {
+    icon = prop.name.includes('Electric') ? '<div class="prop-icon">💡</div>' : '<div class="prop-icon">💧</div>';
+    priceText = `<div class="prop-price">$${prop.price}</div>`;
+  } else if (prop.type === 'chance') {
+    icon = '<div class="prop-icon chance">❓</div>';
+  } else if (prop.type === 'chest') {
+    icon = '<div class="prop-icon chest">📦</div>';
+  } else if (prop.type === 'tax') {
+    icon = '<div class="prop-icon tax">💰</div>';
+    priceText = `<div class="prop-price">$${prop.price}</div>`;
+  }
+  
+  const ownerBorder = ownerColor ? `border: 3px solid ${ownerColor};` : '';
+  
+  return `
+    <div class="monopoly-space ${prop.type} side-${side}" data-position="${prop.id}" style="${ownerBorder}">
+      ${colorBar}
+      <div class="prop-name">${getShortName(prop.name)}</div>
+      ${icon}
+      ${priceText}
+      <div class="space-tokens" id="space-tokens-${prop.id}"></div>
+    </div>
+  `;
+}
+
+function getShortName(name) {
+  const shorts = {
+    'Mediterranean Ave': 'Mediterr.',
+    'Community Chest': 'Comm. Chest',
+    'Connecticut Ave': 'Connect.',
+    'St. Charles Place': 'St. Charles',
+    'Electric Company': 'Electric',
+    'Pennsylvania Railroad': 'Penn. RR',
+    'St. James Place': 'St. James',
+    'Tennessee Ave': 'Tennessee',
+    'New York Ave': 'New York',
+    'Free Parking': 'Free Park',
+    'Kentucky Ave': 'Kentucky',
+    'Indiana Ave': 'Indiana',
+    'Illinois Ave': 'Illinois',
+    'B&O Railroad': 'B&O RR',
+    'Atlantic Ave': 'Atlantic',
+    'Ventnor Ave': 'Ventnor',
+    'Water Works': 'Water',
+    'Marvin Gardens': 'Marvin',
+    'Go To Jail': 'Go Jail',
+    'Pacific Ave': 'Pacific',
+    'North Carolina Ave': 'N. Carolina',
+    'Pennsylvania Ave': 'Penn. Ave',
+    'Short Line': 'Short Line',
+    'Park Place': 'Park Place',
+    'Luxury Tax': 'Luxury Tax',
+    'Reading Railroad': 'Reading RR',
+    'Oriental Ave': 'Oriental',
+    'Vermont Ave': 'Vermont',
+    'Baltic Ave': 'Baltic',
+    'Income Tax': 'Inc. Tax',
+    'States Ave': 'States',
+    'Virginia Ave': 'Virginia'
+  };
+  return shorts[name] || name;
+}
+
+function renderPlayerTokensOnBoard(gameState) {
+  if (!gameState?.players) return;
+  
+  document.querySelectorAll('.space-tokens').forEach(el => el.innerHTML = '');
+  
+  const corners = { 0: 'corner-go', 10: 'corner-jail', 20: 'corner-parking', 30: 'corner-gotojail' };
+  
+  Object.values(corners).forEach(cornerId => {
+    const corner = document.querySelector(`.${cornerId}`);
+    if (corner && !corner.querySelector('.space-tokens')) {
+      const tokensDiv = document.createElement('div');
+      tokensDiv.className = 'space-tokens';
+      tokensDiv.id = `space-tokens-corner-${cornerId}`;
+      corner.appendChild(tokensDiv);
+    }
+  });
+  
+  gameState.players.forEach(player => {
+    if (player.bankrupt) return;
+    
+    const pos = player.position;
+    let tokenContainer;
+    
+    if (corners[pos]) {
+      tokenContainer = document.querySelector(`.${corners[pos]} .space-tokens`);
+    } else {
+      tokenContainer = document.getElementById(`space-tokens-${pos}`);
+    }
+    
+    if (tokenContainer) {
+      const tokenEl = document.createElement('span');
+      tokenEl.className = 'board-token';
+      tokenEl.textContent = PLAYER_TOKENS[player.token]?.icon || '🎮';
+      tokenEl.title = player.username;
+      tokenContainer.appendChild(tokenEl);
+    }
+  });
+}
+
+function updatePlayerDeeds(gameState) {
+  const myPlayer = gameState?.players?.find(p => p.id === currentUser?.id);
+  if (!myPlayer) return;
+  
+  const deedsContainer = document.getElementById('my-deeds');
+  if (!deedsContainer) return;
+  
+  const myProperties = gameState.properties?.filter(p => p.owner === myPlayer.id) || [];
+  
+  if (myProperties.length === 0) {
+    deedsContainer.innerHTML = '<div class="no-deeds">No properties owned yet</div>';
+    return;
+  }
+  
+  deedsContainer.innerHTML = myProperties.map(prop => {
+    const propInfo = MONOPOLY_PROPERTIES.find(p => p.id === prop.id);
+    if (!propInfo) return '';
+    return `
+      <div class="deed-card" style="border-top: 8px solid ${PROPERTY_COLORS[propInfo.color] || '#666'}">
+        <div class="deed-title">${propInfo.name}</div>
+        <div class="deed-price">Price: $${propInfo.price}</div>
+        <div class="deed-rent">Rent: $${prop.rent?.[0] || propInfo.price / 10}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function showDeedPopup(property) {
+  const propInfo = MONOPOLY_PROPERTIES.find(p => p.id === property.id);
+  if (!propInfo) return;
+  
+  const popup = document.getElementById('deed-popup');
+  if (!popup) return;
+  
+  popup.innerHTML = `
+    <div class="deed-popup-content" style="border-color: ${PROPERTY_COLORS[propInfo.color] || '#666'}">
+      <div class="deed-popup-header" style="background: ${PROPERTY_COLORS[propInfo.color] || '#666'}">
+        <h3>TITLE DEED</h3>
+        <h2>${propInfo.name}</h2>
+      </div>
+      <div class="deed-popup-body">
+        <p>RENT: $${property.rent?.[0] || 10}</p>
+        <p>With 1 House: $${property.rent?.[1] || 50}</p>
+        <p>With 2 Houses: $${property.rent?.[2] || 150}</p>
+        <p>With 3 Houses: $${property.rent?.[3] || 450}</p>
+        <p>With 4 Houses: $${property.rent?.[4] || 625}</p>
+        <p>With HOTEL: $${property.rent?.[5] || 750}</p>
+        <hr>
+        <p>Mortgage Value: $${propInfo.price / 2}</p>
+        <p>Houses cost $50 each</p>
+        <p>Hotels, $50 plus 4 houses</p>
+      </div>
+      <button onclick="closeDeedPopup()" class="btn">Close</button>
+    </div>
+  `;
+  popup.style.display = 'flex';
+}
+
+function closeDeedPopup() {
+  const popup = document.getElementById('deed-popup');
+  if (popup) popup.style.display = 'none';
+}
+
+function showCardPopup(cardType, card) {
+  const popup = document.getElementById('deed-popup');
+  if (!popup) return;
+  
+  const isChance = cardType === 'chance';
+  const bgColor = isChance ? '#FF5722' : '#2196F3';
+  const icon = isChance ? '❓' : '📦';
+  const title = isChance ? 'CHANCE' : 'COMMUNITY CHEST';
+  
+  popup.innerHTML = `
+    <div class="card-popup-content" style="border-color: ${bgColor}">
+      <div class="card-popup-header" style="background: ${bgColor}">
+        <span class="card-icon">${icon}</span>
+        <h3>${title}</h3>
+      </div>
+      <div class="card-popup-body">
+        <p>${card.text}</p>
+        <p class="card-effect">${card.effect > 0 ? '+' : ''}$${card.effect}</p>
+      </div>
+      <button onclick="closeDeedPopup()" class="btn">OK</button>
+    </div>
+  `;
+  popup.style.display = 'flex';
 }
 
 function showMonopolyAction(action) {
@@ -647,6 +942,10 @@ function showMonopolyAction(action) {
     actionDiv.innerHTML = `<p>Paid $${action.amount} in taxes</p>`;
   } else if (action.type === 'went_to_jail') {
     actionDiv.innerHTML = `<p>Go to Jail!</p>`;
+  } else if (action.type === 'drew_card') {
+    showCardPopup(action.cardType, action.card);
+    const effectText = action.card.effect >= 0 ? `+$${action.card.effect}` : `-$${Math.abs(action.card.effect)}`;
+    actionDiv.innerHTML = `<p>${action.cardType === 'chance' ? 'Chance' : 'Community Chest'}: ${effectText}</p>`;
   }
 }
 
