@@ -38,9 +38,13 @@ GameHub is a real-time multiplayer gaming platform that combines three classic g
 
 ### 2. Monopoly
 - 2-6 players support
-- Full board with 40 properties
+- Full board with 40 properties displayed with names and prices
+- Property color bars for each property group (brown, lightblue, pink, orange, red, yellow, green, darkblue)
+- Player tokens on board: 🚗 Car, 🎩 Top Hat, 🐕 Dog, 🚢 Ship, 👢 Boot, 🛡️ Thimble
+- Property deed cards displayed when buying properties
+- Chance and Community Chest cards with money effects
 - Property buying and rent collection
-- Dice rolling and player movement
+- Dice rolling with 3D animation and player movement
 - Bankruptcy and win conditions
 - Tax and special spaces
 
