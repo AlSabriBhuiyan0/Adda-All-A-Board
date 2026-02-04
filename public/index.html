@@ -140,103 +140,195 @@
       </div>
 
       <div id="ludo-game" class="game-container" style="display: none;">
-        <div class="ludo-board">
-          <div class="board-center">
-            <div class="home-triangle red"></div>
-            <div class="home-triangle blue"></div>
-            <div class="home-triangle green"></div>
-            <div class="home-triangle yellow"></div>
+        <div class="ludo-board-wrapper">
+          <div class="ludo-board-realistic">
+            <div class="ludo-quadrant red-quadrant">
+              <div class="home-base red-home">
+                <div class="home-base-inner">
+                  <div class="piece-slot" data-color="red" data-index="0"></div>
+                  <div class="piece-slot" data-color="red" data-index="1"></div>
+                  <div class="piece-slot" data-color="red" data-index="2"></div>
+                  <div class="piece-slot" data-color="red" data-index="3"></div>
+                </div>
+              </div>
+            </div>
+            <div class="ludo-quadrant green-quadrant">
+              <div class="home-base green-home">
+                <div class="home-base-inner">
+                  <div class="piece-slot" data-color="green" data-index="0"></div>
+                  <div class="piece-slot" data-color="green" data-index="1"></div>
+                  <div class="piece-slot" data-color="green" data-index="2"></div>
+                  <div class="piece-slot" data-color="green" data-index="3"></div>
+                </div>
+              </div>
+            </div>
+            <div class="ludo-quadrant yellow-quadrant">
+              <div class="home-base yellow-home">
+                <div class="home-base-inner">
+                  <div class="piece-slot" data-color="yellow" data-index="0"></div>
+                  <div class="piece-slot" data-color="yellow" data-index="1"></div>
+                  <div class="piece-slot" data-color="yellow" data-index="2"></div>
+                  <div class="piece-slot" data-color="yellow" data-index="3"></div>
+                </div>
+              </div>
+            </div>
+            <div class="ludo-quadrant blue-quadrant">
+              <div class="home-base blue-home">
+                <div class="home-base-inner">
+                  <div class="piece-slot" data-color="blue" data-index="0"></div>
+                  <div class="piece-slot" data-color="blue" data-index="1"></div>
+                  <div class="piece-slot" data-color="blue" data-index="2"></div>
+                  <div class="piece-slot" data-color="blue" data-index="3"></div>
+                </div>
+              </div>
+            </div>
+            <div class="ludo-center-home">
+              <div class="center-triangle red"></div>
+              <div class="center-triangle green"></div>
+              <div class="center-triangle yellow"></div>
+              <div class="center-triangle blue"></div>
+            </div>
+            <div class="ludo-paths">
+              <div class="path-row top-path" id="top-path"></div>
+              <div class="path-row left-path" id="left-path"></div>
+              <div class="path-row right-path" id="right-path"></div>
+              <div class="path-row bottom-path" id="bottom-path"></div>
+              <div class="home-column red-home-col" id="red-home-col"></div>
+              <div class="home-column green-home-col" id="green-home-col"></div>
+              <div class="home-column yellow-home-col" id="yellow-home-col"></div>
+              <div class="home-column blue-home-col" id="blue-home-col"></div>
+            </div>
           </div>
           
-          <div class="corner red-home">
-            <div class="piece-slot" data-color="red" data-index="0"></div>
-            <div class="piece-slot" data-color="red" data-index="1"></div>
-            <div class="piece-slot" data-color="red" data-index="2"></div>
-            <div class="piece-slot" data-color="red" data-index="3"></div>
-          </div>
-          
-          <div class="corner blue-home">
-            <div class="piece-slot" data-color="blue" data-index="0"></div>
-            <div class="piece-slot" data-color="blue" data-index="1"></div>
-            <div class="piece-slot" data-color="blue" data-index="2"></div>
-            <div class="piece-slot" data-color="blue" data-index="3"></div>
-          </div>
-          
-          <div class="corner green-home">
-            <div class="piece-slot" data-color="green" data-index="0"></div>
-            <div class="piece-slot" data-color="green" data-index="1"></div>
-            <div class="piece-slot" data-color="green" data-index="2"></div>
-            <div class="piece-slot" data-color="green" data-index="3"></div>
-          </div>
-          
-          <div class="corner yellow-home">
-            <div class="piece-slot" data-color="yellow" data-index="0"></div>
-            <div class="piece-slot" data-color="yellow" data-index="1"></div>
-            <div class="piece-slot" data-color="yellow" data-index="2"></div>
-            <div class="piece-slot" data-color="yellow" data-index="3"></div>
-          </div>
-
-          <div class="path-cells"></div>
-        </div>
-
-        <div class="game-controls">
-          <div class="players-status" id="game-players"></div>
-          
-          <div class="dice-container">
-            <div id="dice" class="dice">?</div>
-            <button id="roll-dice-btn" class="btn primary">Roll Dice</button>
-          </div>
-
-          <div id="piece-selection" class="piece-selection" style="display: none;">
-            <p>Select a piece to move:</p>
-            <div class="moveable-pieces"></div>
+          <div class="dice-panel">
+            <div class="players-status" id="game-players"></div>
+            <div class="dice-3d-container">
+              <div id="dice-3d" class="dice-3d">
+                <div class="dice-face front">
+                  <span class="dot center"></span>
+                </div>
+                <div class="dice-face back">
+                  <span class="dot top-left"></span>
+                  <span class="dot top-right"></span>
+                  <span class="dot middle-left"></span>
+                  <span class="dot middle-right"></span>
+                  <span class="dot bottom-left"></span>
+                  <span class="dot bottom-right"></span>
+                </div>
+                <div class="dice-face right">
+                  <span class="dot top-left"></span>
+                  <span class="dot center"></span>
+                  <span class="dot bottom-right"></span>
+                </div>
+                <div class="dice-face left">
+                  <span class="dot top-left"></span>
+                  <span class="dot top-right"></span>
+                  <span class="dot bottom-left"></span>
+                  <span class="dot bottom-right"></span>
+                </div>
+                <div class="dice-face top">
+                  <span class="dot top-left"></span>
+                  <span class="dot top-right"></span>
+                  <span class="dot center"></span>
+                  <span class="dot bottom-left"></span>
+                  <span class="dot bottom-right"></span>
+                </div>
+                <div class="dice-face bottom">
+                  <span class="dot top-left"></span>
+                  <span class="dot top-right"></span>
+                </div>
+              </div>
+            </div>
+            <button id="roll-dice-btn" class="btn primary roll-btn">🎲 Roll Dice</button>
+            <div id="piece-selection" class="piece-selection" style="display: none;">
+              <p>Select a piece to move:</p>
+              <div class="moveable-pieces"></div>
+            </div>
           </div>
         </div>
       </div>
 
       <div id="monopoly-game" class="game-container" style="display: none;">
-        <div class="monopoly-board">
-          <div class="monopoly-center">
-            <h2>MONOPOLY</h2>
-            <div id="monopoly-dice" class="monopoly-dice">
-              <span class="die">?</span>
-              <span class="die">?</span>
+        <div class="monopoly-board-realistic">
+          <div class="monopoly-corner corner-go">GO</div>
+          <div class="monopoly-side top-side" id="monopoly-top-side"></div>
+          <div class="monopoly-corner corner-jail">JAIL</div>
+          <div class="monopoly-side left-side" id="monopoly-left-side"></div>
+          <div class="monopoly-board-center">
+            <div class="monopoly-logo">
+              <h1>MONOPOLY</h1>
+              <div class="monopoly-dice-area">
+                <div class="dice-3d-container small">
+                  <div id="monopoly-dice-1" class="dice-3d-small">
+                    <div class="dice-face front"><span class="dot center"></span></div>
+                    <div class="dice-face back"><span class="dot top-left"></span><span class="dot top-right"></span><span class="dot middle-left"></span><span class="dot middle-right"></span><span class="dot bottom-left"></span><span class="dot bottom-right"></span></div>
+                    <div class="dice-face right"><span class="dot top-left"></span><span class="dot center"></span><span class="dot bottom-right"></span></div>
+                    <div class="dice-face left"><span class="dot top-left"></span><span class="dot top-right"></span><span class="dot bottom-left"></span><span class="dot bottom-right"></span></div>
+                    <div class="dice-face top"><span class="dot top-left"></span><span class="dot top-right"></span><span class="dot center"></span><span class="dot bottom-left"></span><span class="dot bottom-right"></span></div>
+                    <div class="dice-face bottom"><span class="dot top-left"></span><span class="dot top-right"></span></div>
+                  </div>
+                </div>
+                <div class="dice-3d-container small">
+                  <div id="monopoly-dice-2" class="dice-3d-small">
+                    <div class="dice-face front"><span class="dot center"></span></div>
+                    <div class="dice-face back"><span class="dot top-left"></span><span class="dot top-right"></span><span class="dot middle-left"></span><span class="dot middle-right"></span><span class="dot bottom-left"></span><span class="dot bottom-right"></span></div>
+                    <div class="dice-face right"><span class="dot top-left"></span><span class="dot center"></span><span class="dot bottom-right"></span></div>
+                    <div class="dice-face left"><span class="dot top-left"></span><span class="dot top-right"></span><span class="dot bottom-left"></span><span class="dot bottom-right"></span></div>
+                    <div class="dice-face top"><span class="dot top-left"></span><span class="dot top-right"></span><span class="dot center"></span><span class="dot bottom-left"></span><span class="dot bottom-right"></span></div>
+                    <div class="dice-face bottom"><span class="dot top-left"></span><span class="dot top-right"></span></div>
+                  </div>
+                </div>
+              </div>
+              <button id="monopoly-roll-btn" class="btn primary roll-btn">🎲 Roll Dice</button>
+              <div id="monopoly-players" class="monopoly-players-status"></div>
             </div>
-            <button id="monopoly-roll-btn" class="btn primary">Roll Dice</button>
           </div>
-          <div id="monopoly-properties" class="monopoly-properties"></div>
-          <div id="monopoly-players" class="monopoly-players"></div>
+          <div class="monopoly-side right-side" id="monopoly-right-side"></div>
+          <div class="monopoly-corner corner-parking">FREE PARKING</div>
+          <div class="monopoly-side bottom-side" id="monopoly-bottom-side"></div>
+          <div class="monopoly-corner corner-gotojail">GO TO JAIL</div>
         </div>
-        <div class="monopoly-controls">
+        <div class="monopoly-controls-panel">
           <div id="monopoly-player-info" class="player-money-info"></div>
           <div id="monopoly-action" class="monopoly-action"></div>
-          <button id="monopoly-buy-btn" class="btn primary" style="display: none;">Buy Property</button>
-          <button id="monopoly-pass-btn" class="btn secondary" style="display: none;">Pass</button>
+          <div class="monopoly-buttons">
+            <button id="monopoly-buy-btn" class="btn success" style="display: none;">💰 Buy Property</button>
+            <button id="monopoly-pass-btn" class="btn secondary" style="display: none;">Pass</button>
+          </div>
         </div>
       </div>
 
       <div id="uno-game" class="game-container" style="display: none;">
-        <div class="uno-table">
-          <div id="uno-opponents" class="uno-opponents"></div>
-          <div class="uno-center">
-            <div id="uno-deck" class="uno-deck">
-              <div class="card-back">UNO</div>
-              <span id="deck-count">0</span>
+        <div class="uno-table-realistic">
+          <div class="uno-felt">
+            <div id="uno-opponents" class="uno-opponents-circle"></div>
+            <div class="uno-play-area">
+              <div class="uno-deck-stack" id="uno-deck">
+                <div class="uno-card-back">
+                  <div class="uno-logo-card">UNO</div>
+                </div>
+                <div class="uno-card-back offset-1"></div>
+                <div class="uno-card-back offset-2"></div>
+                <span id="deck-count" class="deck-counter">0</span>
+              </div>
+              <div class="uno-direction-indicator" id="uno-direction">↻</div>
+              <div id="uno-discard" class="uno-discard-pile"></div>
+              <div id="uno-current-color" class="uno-color-ring"></div>
             </div>
-            <div id="uno-discard" class="uno-discard"></div>
-            <div id="uno-current-color" class="uno-color-indicator"></div>
+            <div id="uno-hand" class="uno-hand-fan"></div>
           </div>
-          <div id="uno-hand" class="uno-hand"></div>
         </div>
-        <div class="uno-controls">
-          <button id="uno-draw-btn" class="btn primary">Draw Card</button>
-          <button id="uno-call-btn" class="btn warning">UNO!</button>
-          <div id="uno-color-picker" class="color-picker" style="display: none;">
+        <div class="uno-controls-panel">
+          <button id="uno-draw-btn" class="btn primary">📥 Draw Card</button>
+          <button id="uno-call-btn" class="btn uno-call-btn">🔔 UNO!</button>
+          <div id="uno-color-picker" class="uno-color-picker-modal" style="display: none;">
             <p>Choose a color:</p>
-            <button class="color-btn red" data-color="red"></button>
-            <button class="color-btn blue" data-color="blue"></button>
-            <button class="color-btn green" data-color="green"></button>
-            <button class="color-btn yellow" data-color="yellow"></button>
+            <div class="color-buttons">
+              <button class="color-btn-large red" data-color="red">🔴</button>
+              <button class="color-btn-large blue" data-color="blue">🔵</button>
+              <button class="color-btn-large green" data-color="green">🟢</button>
+              <button class="color-btn-large yellow" data-color="yellow">🟡</button>
+            </div>
           </div>
         </div>
       </div>

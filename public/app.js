@@ -168,8 +168,10 @@ document.getElementById('exit-game-btn').addEventListener('click', () => {
 });
 
 document.getElementById('roll-dice-btn').addEventListener('click', () => {
-  const dice = document.getElementById('dice');
-  dice.classList.add('rolling');
+  const dice = document.getElementById('dice-3d');
+  if (dice) {
+    dice.classList.add('rolling');
+  }
   socket.emit('roll_dice');
 });
 
@@ -223,11 +225,18 @@ socket.on('monopoly_moved', (data) => {
   currentGame = data.gameState;
   updateMonopolyBoard(data.gameState);
   
-  const dice = document.querySelectorAll('#monopoly-dice .die');
-  dice[0].textContent = data.diceValue[0];
-  dice[1].textContent = data.diceValue[1];
+  const dice1 = document.getElementById('monopoly-dice-1');
+  const dice2 = document.getElementById('monopoly-dice-2');
+  if (dice1) {
+    dice1.classList.remove('rolling');
+    setDiceRotation(dice1, data.diceValue[0]);
+  }
+  if (dice2) {
+    dice2.classList.remove('rolling');
+    setDiceRotation(dice2, data.diceValue[1]);
+  }
   
-  if (data.result.action) {
+  if (data.result && data.result.action) {
     showMonopolyAction(data.result.action);
   }
 });
@@ -235,8 +244,10 @@ socket.on('monopoly_moved', (data) => {
 socket.on('monopoly_bought', (data) => {
   currentGame = data.gameState;
   updateMonopolyBoard(data.gameState);
-  document.getElementById('monopoly-buy-btn').style.display = 'none';
-  document.getElementById('monopoly-pass-btn').style.display = 'none';
+  const buyBtn = document.getElementById('monopoly-buy-btn');
+  const passBtn = document.getElementById('monopoly-pass-btn');
+  if (buyBtn) buyBtn.style.display = 'none';
+  if (passBtn) passBtn.style.display = 'none';
 });
 
 socket.on('uno_card_played', (data) => {
@@ -280,9 +291,11 @@ function showGameContainer(gameType) {
 }
 
 socket.on('dice_rolled', (data) => {
-  const dice = document.getElementById('dice');
-  dice.classList.remove('rolling');
-  dice.textContent = data.diceValue;
+  const dice = document.getElementById('dice-3d');
+  if (dice) {
+    dice.classList.remove('rolling');
+    setDiceRotation(dice, data.diceValue);
+  }
   
   currentGame = data.gameState;
   updateGameBoard(data.gameState);
@@ -293,11 +306,26 @@ socket.on('dice_rolled', (data) => {
   }
 });
 
+function setDiceRotation(diceElement, value) {
+  const rotations = {
+    1: 'rotateX(0deg) rotateY(0deg)',
+    2: 'rotateX(-90deg) rotateY(0deg)',
+    3: 'rotateY(90deg)',
+    4: 'rotateY(-90deg)',
+    5: 'rotateX(90deg)',
+    6: 'rotateY(180deg)'
+  };
+  diceElement.style.transform = rotations[value] || 'rotateX(0deg) rotateY(0deg)';
+}
+
 socket.on('piece_moved', (data) => {
   currentGame = data.gameState;
   updateGameBoard(data.gameState);
   document.getElementById('piece-selection').style.display = 'none';
-  document.getElementById('dice').textContent = '?';
+  const dice = document.getElementById('dice-3d');
+  if (dice) {
+    dice.style.transform = 'rotateX(-20deg) rotateY(20deg)';
+  }
 });
 
 socket.on('invalid_move', () => {
@@ -515,6 +543,10 @@ document.getElementById('back-to-lobby-btn').addEventListener('click', () => {
 });
 
 document.getElementById('monopoly-roll-btn')?.addEventListener('click', () => {
+  const dice1 = document.getElementById('monopoly-dice-1');
+  const dice2 = document.getElementById('monopoly-dice-2');
+  if (dice1) dice1.classList.add('rolling');
+  if (dice2) dice2.classList.add('rolling');
   socket.emit('monopoly_roll');
 });
 
@@ -527,9 +559,12 @@ document.getElementById('monopoly-buy-btn')?.addEventListener('click', () => {
 
 document.getElementById('monopoly-pass-btn')?.addEventListener('click', () => {
   pendingProperty = null;
-  document.getElementById('monopoly-buy-btn').style.display = 'none';
-  document.getElementById('monopoly-pass-btn').style.display = 'none';
-  document.getElementById('monopoly-action').innerHTML = '';
+  const buyBtn = document.getElementById('monopoly-buy-btn');
+  const passBtn = document.getElementById('monopoly-pass-btn');
+  const actionDiv = document.getElementById('monopoly-action');
+  if (buyBtn) buyBtn.style.display = 'none';
+  if (passBtn) passBtn.style.display = 'none';
+  if (actionDiv) actionDiv.innerHTML = '';
 });
 
 document.getElementById('uno-draw-btn')?.addEventListener('click', () => {
@@ -556,41 +591,44 @@ let pendingCardIndex = null;
 
 function updateMonopolyBoard(gameState) {
   const playersContainer = document.getElementById('monopoly-players');
-  playersContainer.innerHTML = gameState.players.map((player, index) => `
-    <div class="monopoly-player ${index === gameState.currentPlayerIndex ? 'current' : ''} ${player.bankrupt ? 'bankrupt' : ''}">
-      <div class="monopoly-token" style="background: ${getTokenColor(player.token)}"></div>
-      <div>
-        <div>${player.username}</div>
-        <div class="money">$${player.money}</div>
+  if (playersContainer) {
+    playersContainer.innerHTML = gameState.players.map((player, index) => `
+      <div class="monopoly-player-chip ${index === gameState.currentPlayerIndex ? 'current' : ''} ${player.bankrupt ? 'bankrupt' : ''}">
+        <div class="player-token" style="background: ${getTokenColor(player.token)}"></div>
+        <span>${player.username}</span>
+        <span class="player-money">$${player.money}</span>
       </div>
-      <div>Pos: ${player.position}</div>
-    </div>
-  `).join('');
+    `).join('');
+  }
 
   const myPlayer = gameState.players.find(p => p.id === currentUser?.id);
-  if (myPlayer) {
-    document.getElementById('monopoly-player-info').innerHTML = `
-      <div>Your money: <span class="money">$${myPlayer.money}</span></div>
-      <div>Properties: ${myPlayer.properties.length}</div>
+  const playerInfo = document.getElementById('monopoly-player-info');
+  if (myPlayer && playerInfo) {
+    playerInfo.innerHTML = `
+      <div>Your money: <span class="money">$${myPlayer.money}</span> | Position: ${myPlayer.position} | Properties: ${myPlayer.properties?.length || 0}</div>
     `;
   }
 
   const isMyTurn = myPlayer && gameState.currentPlayerIndex === gameState.players.findIndex(p => p.id === myPlayer.id);
-  document.getElementById('monopoly-roll-btn').disabled = !isMyTurn;
+  const rollBtn = document.getElementById('monopoly-roll-btn');
+  if (rollBtn) rollBtn.disabled = !isMyTurn;
   
   const turnIndicator = document.getElementById('turn-indicator');
-  if (isMyTurn) {
-    turnIndicator.textContent = 'Your Turn';
-    turnIndicator.classList.remove('waiting');
-  } else {
-    const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-    turnIndicator.textContent = `${currentPlayer?.username}'s Turn`;
-    turnIndicator.classList.add('waiting');
+  if (turnIndicator) {
+    if (isMyTurn) {
+      turnIndicator.textContent = 'Your Turn';
+      turnIndicator.classList.remove('waiting');
+    } else {
+      const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+      turnIndicator.textContent = `${currentPlayer?.username}'s Turn`;
+      turnIndicator.classList.add('waiting');
+    }
   }
 }
 
 function showMonopolyAction(action) {
   const actionDiv = document.getElementById('monopoly-action');
+  if (!actionDiv) return;
   
   if (action.type === 'can_buy') {
     actionDiv.innerHTML = `
@@ -599,8 +637,10 @@ function showMonopolyAction(action) {
       <p>Would you like to buy this property?</p>
     `;
     pendingProperty = action.property;
-    document.getElementById('monopoly-buy-btn').style.display = 'inline-block';
-    document.getElementById('monopoly-pass-btn').style.display = 'inline-block';
+    const buyBtn = document.getElementById('monopoly-buy-btn');
+    const passBtn = document.getElementById('monopoly-pass-btn');
+    if (buyBtn) buyBtn.style.display = 'inline-block';
+    if (passBtn) passBtn.style.display = 'inline-block';
   } else if (action.type === 'paid_rent') {
     actionDiv.innerHTML = `<p>Paid $${action.rent} rent for ${action.property.name}</p>`;
   } else if (action.type === 'paid_tax') {
@@ -624,18 +664,20 @@ function getTokenColor(token) {
 
 function updateUnoTable(gameState) {
   const opponentsContainer = document.getElementById('uno-opponents');
-  opponentsContainer.innerHTML = gameState.players
-    .filter(p => p.id !== currentUser?.id)
-    .map((player, index) => `
-      <div class="uno-opponent ${gameState.currentPlayerIndex === gameState.players.findIndex(p2 => p2.id === player.id) ? 'current' : ''}">
-        <div>${player.username}</div>
-        <div class="card-count">${player.handCount} cards</div>
-        ${player.uno ? '<div style="color: #F1C40F;">UNO!</div>' : ''}
-      </div>
-    `).join('');
+  if (opponentsContainer) {
+    opponentsContainer.innerHTML = gameState.players
+      .filter(p => p.id !== currentUser?.id)
+      .map((player, index) => `
+        <div class="uno-opponent ${gameState.currentPlayerIndex === gameState.players.findIndex(p2 => p2.id === player.id) ? 'current' : ''}">
+          <div>${player.username}</div>
+          <div class="card-count">${player.handCount} cards</div>
+          ${player.uno ? '<div style="color: #F1C40F;">UNO!</div>' : ''}
+        </div>
+      `).join('');
+  }
 
   const discardContainer = document.getElementById('uno-discard');
-  if (gameState.topCard) {
+  if (discardContainer && gameState.topCard) {
     discardContainer.innerHTML = `
       <div class="uno-card ${gameState.topCard.color}">
         ${getCardDisplay(gameState.topCard)}
@@ -644,28 +686,40 @@ function updateUnoTable(gameState) {
   }
 
   const colorIndicator = document.getElementById('uno-current-color');
-  colorIndicator.className = `uno-color-indicator ${gameState.currentColor}`;
+  if (colorIndicator) {
+    colorIndicator.className = `uno-color-ring ${gameState.currentColor}`;
+  }
 
-  document.getElementById('deck-count').textContent = gameState.deckCount;
+  const deckCount = document.getElementById('deck-count');
+  if (deckCount) deckCount.textContent = gameState.deckCount || 0;
+  
+  const direction = document.getElementById('uno-direction');
+  if (direction) {
+    direction.textContent = gameState.direction === 1 ? '↻' : '↺';
+  }
 
   const myPlayer = gameState.players.find(p => p.id === currentUser?.id);
   const isMyTurn = myPlayer && gameState.currentPlayerIndex === gameState.players.findIndex(p => p.id === myPlayer.id);
   
-  document.getElementById('uno-draw-btn').disabled = !isMyTurn;
+  const drawBtn = document.getElementById('uno-draw-btn');
+  if (drawBtn) drawBtn.disabled = !isMyTurn;
   
   const turnIndicator = document.getElementById('turn-indicator');
-  if (isMyTurn) {
-    turnIndicator.textContent = 'Your Turn';
-    turnIndicator.classList.remove('waiting');
-  } else {
-    const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-    turnIndicator.textContent = `${currentPlayer?.username}'s Turn`;
-    turnIndicator.classList.add('waiting');
+  if (turnIndicator) {
+    if (isMyTurn) {
+      turnIndicator.textContent = 'Your Turn';
+      turnIndicator.classList.remove('waiting');
+    } else {
+      const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+      turnIndicator.textContent = `${currentPlayer?.username}'s Turn`;
+      turnIndicator.classList.add('waiting');
+    }
   }
 }
 
 function updateUnoHand(hand) {
   const handContainer = document.getElementById('uno-hand');
+  if (!handContainer) return;
   handContainer.innerHTML = hand.map((card, index) => `
     <div class="uno-card ${card.color}" data-index="${index}" onclick="playUnoCard(${index}, '${card.color}', '${card.value}')">
       ${getCardDisplay(card)}
