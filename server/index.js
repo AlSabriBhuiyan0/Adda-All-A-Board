@@ -369,6 +369,39 @@ class MonopolyGame {
     this.type = 'monopoly';
     this.board = this.initBoard();
     this.tokens = ['car', 'hat', 'dog', 'ship', 'boot', 'thimble'];
+    this.chanceCards = this.initChanceCards();
+    this.chestCards = this.initChestCards();
+  }
+
+  initChanceCards() {
+    return [
+      { text: 'Advance to GO. Collect $200.', effect: 200 },
+      { text: 'Bank pays you dividend of $50.', effect: 50 },
+      { text: 'Your building loan matures. Collect $150.', effect: 150 },
+      { text: 'You have won a crossword competition. Collect $100.', effect: 100 },
+      { text: 'Pay poor tax of $15.', effect: -15 },
+      { text: 'Speeding fine $15.', effect: -15 },
+      { text: 'You are assessed for street repairs. Pay $40.', effect: -40 },
+      { text: 'Pay school fees of $50.', effect: -50 }
+    ];
+  }
+
+  initChestCards() {
+    return [
+      { text: 'Bank error in your favor. Collect $200.', effect: 200 },
+      { text: 'Doctor\'s fees. Pay $50.', effect: -50 },
+      { text: 'From sale of stock you get $50.', effect: 50 },
+      { text: 'Holiday fund matures. Receive $100.', effect: 100 },
+      { text: 'Income tax refund. Collect $20.', effect: 20 },
+      { text: 'Life insurance matures. Collect $100.', effect: 100 },
+      { text: 'Pay hospital fees of $100.', effect: -100 },
+      { text: 'You inherit $100.', effect: 100 }
+    ];
+  }
+
+  drawCard(type) {
+    const cards = type === 'chance' ? this.chanceCards : this.chestCards;
+    return cards[Math.floor(Math.random() * cards.length)];
   }
 
   initBoard() {
@@ -489,6 +522,14 @@ class MonopolyGame {
       player.position = 10;
       player.inJail = true;
       action = { type: 'went_to_jail' };
+    } else if (landedOn.type === 'chance') {
+      const card = this.drawCard('chance');
+      player.money += card.effect;
+      action = { type: 'drew_card', cardType: 'chance', card };
+    } else if (landedOn.type === 'chest') {
+      const card = this.drawCard('chest');
+      player.money += card.effect;
+      action = { type: 'drew_card', cardType: 'chest', card };
     }
 
     if (this.diceValue[0] !== this.diceValue[1]) {
@@ -1025,9 +1066,11 @@ io.on('connection', (socket) => {
     const result = game.buyProperty(playerIndex, propertyId);
 
     if (result.success) {
+      const player = game.players[playerIndex];
       io.to(currentGameId).emit('monopoly_bought', {
         playerIndex,
         property: result.property,
+        buyerId: player.id,
         gameState: game.getState()
       });
     } else {
