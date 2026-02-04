@@ -106,8 +106,20 @@ The app supports 4 visual themes:
 - **Pirate**: Dark ocean blues
 - **Christmas**: Red and green festive
 
+## Spectator & Social Features
+- **Spectator Mode**: Join games as a viewer without playing
+- **Sticker Reactions**: Send animated stickers (clap, fire, heart, etc.) to cheer players
+- **Voice Chat**: Join voice channel to talk with players (UI ready, WebRTC implementation pending)
+- **Room Status**: Shows player count and spectator count
+- **Chat Panel**: Enhanced chat with spectator list and sticker bar
+
+## Monopoly House/Hotel System
+- **Deed Panel**: Properties you own displayed beside the board
+- **Building Purchase**: Buy houses (up to 4) and hotels on owned properties
+- **Visual Indicators**: Building icons shown on deed cards
+
 ## Next Steps
-1. Add voice chat support
+1. Implement WebRTC voice chat backend
 2. Add friend system
 3. Add in-app purchases for themes
 4. Multi-language support

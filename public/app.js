@@ -5,6 +5,37 @@ let currentGame = null;
 let authToken = localStorage.getItem('gameToken');
 let selectedTheme = localStorage.getItem('gameTheme') || 'classic';
 let ownedDeeds = [];
+let isSpectator = false;
+let voiceConnected = false;
+
+const LUDO_PATH_MAP = {
+  topRow: [
+    { pos: 13, row: 1, col: 4 }, { pos: 12, row: 1, col: 5 }, { pos: 11, row: 1, col: 6 },
+    { pos: 14, row: 2, col: 4, homeStretch: 'green' }, { pos: -1, row: 2, col: 5 }, { pos: 10, row: 2, col: 6 },
+    { pos: 15, row: 3, col: 4, homeStretch: 'green' }, { pos: -1, row: 3, col: 5 }, { pos: 9, row: 3, col: 6 }
+  ],
+  leftCol: [
+    { pos: 6, row: 4, col: 1 }, { pos: 5, row: 4, col: 2 }, { pos: 4, row: 4, col: 3 },
+    { pos: 7, row: 5, col: 1 }, { pos: 51, row: 5, col: 2, homeStretch: 'red' }, { pos: 52, row: 5, col: 3, homeStretch: 'red' },
+    { pos: 8, row: 6, col: 1 }, { pos: 9, row: 6, col: 2 }, { pos: 10, row: 6, col: 3 }
+  ],
+  rightCol: [
+    { pos: 19, row: 4, col: 7 }, { pos: 20, row: 4, col: 8 }, { pos: 21, row: 4, col: 9 },
+    { pos: 55, row: 5, col: 7, homeStretch: 'green' }, { pos: 56, row: 5, col: 8, homeStretch: 'green' }, { pos: 22, row: 5, col: 9 },
+    { pos: 17, row: 6, col: 7 }, { pos: 18, row: 6, col: 8 }, { pos: 19, row: 6, col: 9 }
+  ],
+  bottomRow: [
+    { pos: 32, row: 7, col: 4, homeStretch: 'yellow' }, { pos: -1, row: 7, col: 5 }, { pos: 24, row: 7, col: 6 },
+    { pos: 31, row: 8, col: 4, homeStretch: 'yellow' }, { pos: -1, row: 8, col: 5 }, { pos: 25, row: 8, col: 6 },
+    { pos: 30, row: 9, col: 4 }, { pos: 29, row: 9, col: 5 }, { pos: 28, row: 9, col: 6 }
+  ]
+};
+
+const LUDO_POSITIONS = [];
+for (let i = 0; i < 52; i++) LUDO_POSITIONS[i] = { type: 'path', index: i };
+
+const START_POSITIONS = { red: 1, blue: 14, green: 27, yellow: 40 };
+const SAFE_POSITIONS = [1, 9, 14, 22, 27, 35, 40, 48];
 
 const MONOPOLY_PROPERTIES = [
   { id: 0, name: 'GO', type: 'go', price: 0 },
@@ -341,6 +372,9 @@ socket.on('game_started', (gameState) => {
 });
 
 function showGameContainer(gameType) {
+  if (gameType === 'ludo') {
+    initLudoBoard();
+  }
   document.getElementById('ludo-game').style.display = 'none';
   document.getElementById('monopoly-game').style.display = 'none';
   document.getElementById('uno-game').style.display = 'none';
@@ -504,20 +538,148 @@ function updateLudoBoard(gameState) {
   updatePiecesOnBoard(gameState);
 }
 
+function initLudoBoard() {
+  const board = document.querySelector('.ludo-board-grid');
+  if (!board) return;
+  
+  document.querySelectorAll('.ludo-path-cell').forEach(c => c.remove());
+  
+  const pathCells = [
+    { row: 4, col: 1, pos: 7 },
+    { row: 4, col: 2, pos: 6 },
+    { row: 4, col: 3, pos: 5 },
+    { row: 5, col: 1, pos: 8 },
+    { row: 5, col: 2, homeStretch: 'red', homePos: 1 },
+    { row: 5, col: 3, homeStretch: 'red', homePos: 2 },
+    { row: 6, col: 1, pos: 9, safe: true },
+    { row: 6, col: 2, pos: 10 },
+    { row: 6, col: 3, pos: 11 },
+    
+    { row: 1, col: 4, pos: 13 },
+    { row: 1, col: 5, pos: 14, safe: true, start: 'blue' },
+    { row: 1, col: 6, pos: 15 },
+    { row: 2, col: 4, pos: 12 },
+    { row: 2, col: 5, homeStretch: 'blue', homePos: 1 },
+    { row: 2, col: 6, pos: 16 },
+    { row: 3, col: 4, pos: 51 },
+    { row: 3, col: 5, homeStretch: 'blue', homePos: 2 },
+    { row: 3, col: 6, pos: 17 },
+    
+    { row: 4, col: 7, pos: 19 },
+    { row: 4, col: 8, pos: 20 },
+    { row: 4, col: 9, pos: 21 },
+    { row: 5, col: 7, homeStretch: 'green', homePos: 2 },
+    { row: 5, col: 8, homeStretch: 'green', homePos: 1 },
+    { row: 5, col: 9, pos: 22, safe: true },
+    { row: 6, col: 7, pos: 25 },
+    { row: 6, col: 8, pos: 24 },
+    { row: 6, col: 9, pos: 23 },
+    
+    { row: 7, col: 4, pos: 33 },
+    { row: 7, col: 5, homeStretch: 'yellow', homePos: 2 },
+    { row: 7, col: 6, pos: 27, safe: true, start: 'green' },
+    { row: 8, col: 4, pos: 34 },
+    { row: 8, col: 5, homeStretch: 'yellow', homePos: 1 },
+    { row: 8, col: 6, pos: 26 },
+    { row: 9, col: 4, pos: 35, safe: true },
+    { row: 9, col: 5, pos: 36 },
+    { row: 9, col: 6, pos: 37 },
+    
+    { row: 4, col: 4, pos: 4 },
+    { row: 4, col: 5, pos: 3 },
+    { row: 4, col: 6, pos: 2 },
+    { row: 6, col: 4, pos: 38 },
+    { row: 6, col: 5, pos: 39 },
+    { row: 6, col: 6, pos: 40, safe: true, start: 'yellow' },
+    
+    { row: 1, col: 7, pos: 18 },
+    { row: 2, col: 7, pos: 52 },
+    { row: 3, col: 7, homeStretch: 'green', homePos: 3 },
+    
+    { row: 7, col: 1, pos: 46 },
+    { row: 8, col: 1, pos: 47 },
+    { row: 9, col: 1, pos: 48, safe: true },
+    
+    { row: 7, col: 3, homeStretch: 'red', homePos: 3 },
+    { row: 8, col: 3, pos: 49 },
+    { row: 9, col: 3, pos: 50 },
+    
+    { row: 7, col: 9, pos: 28 },
+    { row: 8, col: 9, pos: 29 },
+    { row: 9, col: 9, pos: 30 },
+    
+    { row: 3, col: 9, pos: 31 },
+    { row: 2, col: 9, pos: 32 },
+    { row: 1, col: 9, pos: 1, safe: true, start: 'red' },
+    
+    { row: 9, col: 7, homeStretch: 'yellow', homePos: 3 },
+    
+    { row: 1, col: 3, pos: 41 },
+    { row: 2, col: 3, pos: 42 },
+    { row: 3, col: 3, pos: 43 },
+    { row: 1, col: 1, pos: 44 },
+    { row: 2, col: 1, pos: 45 },
+  ];
+  
+  pathCells.forEach(cell => {
+    if (cell.area === 'corner') return;
+    
+    const div = document.createElement('div');
+    div.className = 'ludo-path-cell';
+    div.style.gridArea = `${cell.row}/${cell.col}`;
+    
+    if (cell.pos !== undefined && !cell.homeStretch) {
+      div.dataset.pos = cell.pos;
+    }
+    
+    if (cell.homeStretch) {
+      div.classList.add(`home-stretch-${cell.homeStretch}`);
+      div.dataset.homeStretch = cell.homeStretch;
+      div.dataset.homePos = cell.homePos;
+    }
+    
+    if (cell.start) {
+      div.classList.add(`start-${cell.start}`);
+    }
+    
+    if (cell.safe || SAFE_POSITIONS.includes(cell.pos)) {
+      div.classList.add('safe');
+    }
+    
+    board.appendChild(div);
+  });
+}
+
 function updatePiecesOnBoard(gameState) {
   document.querySelectorAll('.piece-slot .piece').forEach(p => p.remove());
+  document.querySelectorAll('.ludo-path-cell .piece').forEach(p => p.remove());
   document.querySelectorAll('.piece-slot').forEach(slot => slot.classList.remove('moveable'));
   
   gameState.players.forEach(player => {
     player.pieces.forEach((pos, index) => {
+      const piece = document.createElement('div');
+      piece.className = `piece ${player.color}`;
+      piece.dataset.pieceIndex = index;
+      piece.textContent = index + 1;
+      piece.style.fontSize = '10px';
+      piece.style.display = 'flex';
+      piece.style.alignItems = 'center';
+      piece.style.justifyContent = 'center';
+      piece.style.color = player.color === 'yellow' ? '#333' : 'white';
+      piece.style.fontWeight = 'bold';
+      
       if (pos === -1) {
-        const slot = document.querySelector(`.${player.color}-home .piece-slot[data-index="${index}"]`);
-        if (slot) {
-          const piece = document.createElement('div');
-          piece.className = `piece ${player.color}`;
-          piece.dataset.pieceIndex = index;
-          slot.appendChild(piece);
-        }
+        const slot = document.querySelector(`.${player.color}-home-area .piece-slot[data-index="${index}"]`);
+        if (slot) slot.appendChild(piece);
+      } else if (pos >= 0 && pos <= 51) {
+        const absolutePos = (START_POSITIONS[player.color] + pos) % 52;
+        const finalPos = absolutePos === 0 ? 52 : absolutePos;
+        const pathCell = document.querySelector(`.ludo-path-cell[data-pos="${finalPos}"]`);
+        if (pathCell) pathCell.appendChild(piece);
+      } else if (pos >= 52 && pos <= 57) {
+        const homePos = pos - 51;
+        const homeCell = document.querySelector(`.ludo-path-cell[data-home-stretch="${player.color}"][data-home-pos="${homePos}"]`);
+        if (homeCell) homeCell.appendChild(piece);
       }
     });
   });
@@ -660,6 +822,7 @@ function updateMonopolyBoard(gameState) {
   renderMonopolySpaces(gameState);
   renderPlayerTokensOnBoard(gameState);
   updatePlayerDeeds(gameState);
+  updateDeedsPanel(gameState);
   
   const playersContainer = document.getElementById('monopoly-players');
   if (playersContainer) {
@@ -1045,6 +1208,157 @@ window.playUnoCard = function(index, color, value) {
     socket.emit('uno_play_card', index, null);
   }
 };
+
+function updateDeedsPanel(gameState) {
+  const deedsList = document.getElementById('deeds-list');
+  if (!deedsList || !gameState || gameState.type !== 'monopoly') return;
+  
+  const myPlayer = gameState.players.find(p => p.id === currentUser?.id);
+  if (!myPlayer) return;
+  
+  const myProperties = gameState.properties?.filter(p => p.owner === myPlayer.id) || [];
+  
+  const colorCodes = {
+    brown: '#8B4513', lightblue: '#87CEEB', pink: '#FF69B4', orange: '#FFA500',
+    red: '#FF0000', yellow: '#FFD700', green: '#228B22', darkblue: '#00008B'
+  };
+  
+  deedsList.innerHTML = myProperties.length === 0 
+    ? '<p style="color: #888; font-size: 0.8rem;">No properties owned yet</p>'
+    : myProperties.map(prop => {
+        const propData = MONOPOLY_PROPERTIES.find(p => p.id === prop.id);
+        if (!propData || propData.type !== 'property') return '';
+        
+        const houses = prop.houses || 0;
+        const hasHotel = houses === 5;
+        const houseCost = propData.price / 2;
+        const canBuyHouse = myPlayer.money >= houseCost && houses < 5;
+        
+        return `
+          <div class="deed-card-mini">
+            <div class="deed-color-bar" style="background: ${colorCodes[propData.color] || '#ccc'}"></div>
+            <div class="deed-name">${propData.name}</div>
+            <div class="deed-info">Rent: $${propData.price / 10 * (houses + 1)}</div>
+            <div class="building-section">
+              <div class="building-icons">
+                ${hasHotel ? '<span class="building-icon">🏨</span>' : 
+                  Array(houses).fill('<span class="building-icon">🏠</span>').join('')}
+              </div>
+              <button class="buy-building-btn" 
+                ${!canBuyHouse ? 'disabled' : ''} 
+                onclick="buyBuilding(${prop.id})">
+                ${hasHotel ? 'Max' : houses === 4 ? '🏨 $' + houseCost : '🏠 $' + houseCost}
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+}
+
+window.buyBuilding = function(propertyId) {
+  socket.emit('monopoly_buy_building', propertyId);
+};
+
+function updateSpectatorList(spectators) {
+  const spectatorList = document.getElementById('spectator-list');
+  if (!spectatorList) return;
+  
+  spectatorList.innerHTML = spectators.map(s => 
+    `<div class="spectator-badge">${s.username}</div>`
+  ).join('');
+  
+  const spectatorCount = document.getElementById('spectator-count');
+  if (spectatorCount) spectatorCount.textContent = `${spectators.length} Watching`;
+}
+
+function updatePlayerCount(count) {
+  const playerCount = document.getElementById('player-count');
+  if (playerCount) playerCount.textContent = `${count} Players`;
+}
+
+function sendSticker(sticker) {
+  socket.emit('send_sticker', sticker);
+}
+
+function showFloatingSticker(sticker, username) {
+  const floater = document.createElement('div');
+  floater.className = 'sticker-float';
+  floater.textContent = sticker;
+  floater.style.left = Math.random() * 60 + 20 + '%';
+  floater.style.bottom = '100px';
+  document.body.appendChild(floater);
+  
+  setTimeout(() => floater.remove(), 2000);
+  
+  const chatMessages = document.getElementById('chat-messages');
+  if (chatMessages) {
+    const msg = document.createElement('div');
+    msg.className = 'chat-message sticker';
+    msg.innerHTML = `<strong>${username}:</strong> ${sticker}`;
+    chatMessages.appendChild(msg);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+}
+
+document.querySelectorAll('.sticker-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const sticker = btn.dataset.sticker;
+    sendSticker(sticker);
+  });
+});
+
+socket.on('sticker_received', (data) => {
+  showFloatingSticker(data.sticker, data.username);
+});
+
+socket.on('spectators_updated', (spectators) => {
+  updateSpectatorList(spectators);
+});
+
+socket.on('voice_participants_updated', (participants) => {
+  const container = document.getElementById('voice-participants');
+  if (container) {
+    container.innerHTML = participants.map(p => 
+      `<div class="voice-participant ${p.speaking ? 'speaking' : ''}">${p.username}</div>`
+    ).join('');
+  }
+});
+
+const voiceToggleBtn = document.getElementById('voice-toggle-btn');
+if (voiceToggleBtn) {
+  voiceToggleBtn.addEventListener('click', () => {
+    if (voiceConnected) {
+      socket.emit('leave_voice');
+      voiceToggleBtn.textContent = '🎤 Join Voice';
+      voiceToggleBtn.classList.remove('active');
+    } else {
+      socket.emit('join_voice');
+      voiceToggleBtn.textContent = '🎤 Leave Voice';
+      voiceToggleBtn.classList.add('active');
+    }
+    voiceConnected = !voiceConnected;
+  });
+}
+
+socket.on('spectator_joined', (data) => {
+  isSpectator = true;
+  currentGame = data.gameState;
+  showScreen('game');
+  showGameContainer(data.gameState.type);
+  updateGameBoard(data.gameState);
+  document.querySelectorAll('.game-controls button').forEach(btn => btn.disabled = true);
+});
+
+socket.on('monopoly_building_bought', (data) => {
+  currentGame = data.gameState;
+  updateMonopolyBoard(data.gameState);
+});
+
+socket.on('room_status_updated', (data) => {
+  updatePlayerCount(data.players);
+  const spectatorCount = document.getElementById('spectator-count');
+  if (spectatorCount) spectatorCount.textContent = `${data.spectators} Watching`;
+});
 
 if (authToken) {
   socket.emit('authenticate', authToken);

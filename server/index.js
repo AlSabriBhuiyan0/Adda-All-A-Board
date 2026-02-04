@@ -1154,6 +1154,81 @@ io.on('connection', (socket) => {
     });
   });
 
+  socket.on('send_sticker', (sticker) => {
+    if (!currentGameId || !currentUser) return;
+    io.to(currentGameId).emit('sticker_received', {
+      sticker,
+      username: currentUser.username
+    });
+  });
+
+  socket.on('join_as_spectator', (gameId) => {
+    if (!currentUser) return;
+    const game = activeGames.get(gameId);
+    if (!game) return;
+    
+    if (!game.spectators) game.spectators = [];
+    game.spectators.push({ id: currentUser.id, username: currentUser.username, socketId: socket.id });
+    socket.join(gameId);
+    currentGameId = gameId;
+    
+    socket.emit('spectator_joined', { gameState: game.getState() });
+    io.to(gameId).emit('spectators_updated', game.spectators);
+    
+    const playerCount = game.players.length;
+    io.to(gameId).emit('room_status_updated', { players: playerCount, spectators: game.spectators.length });
+  });
+
+  socket.on('join_voice', () => {
+    if (!currentGameId || !currentUser) return;
+    const game = activeGames.get(currentGameId);
+    if (!game) return;
+    
+    if (!game.voiceParticipants) game.voiceParticipants = [];
+    if (!game.voiceParticipants.find(p => p.id === currentUser.id)) {
+      game.voiceParticipants.push({ id: currentUser.id, username: currentUser.username, speaking: false });
+    }
+    io.to(currentGameId).emit('voice_participants_updated', game.voiceParticipants);
+  });
+
+  socket.on('leave_voice', () => {
+    if (!currentGameId || !currentUser) return;
+    const game = activeGames.get(currentGameId);
+    if (!game || !game.voiceParticipants) return;
+    
+    game.voiceParticipants = game.voiceParticipants.filter(p => p.id !== currentUser.id);
+    io.to(currentGameId).emit('voice_participants_updated', game.voiceParticipants);
+  });
+
+  socket.on('monopoly_buy_building', (propertyId) => {
+    if (!currentGameId || !currentUser) return;
+    const game = activeGames.get(currentGameId);
+    if (!game || game.type !== 'monopoly') return;
+
+    const property = game.properties.find(p => p.id === propertyId);
+    if (!property || property.owner !== currentUser.id) return;
+
+    const player = game.players.find(p => p.id === currentUser.id);
+    if (!player) return;
+
+    const propData = game.board[propertyId];
+    if (!propData || propData.type !== 'property') return;
+
+    const houseCost = propData.price / 2;
+    const currentHouses = property.houses || 0;
+
+    if (currentHouses >= 5 || player.money < houseCost) return;
+
+    player.money -= houseCost;
+    property.houses = currentHouses + 1;
+
+    io.to(currentGameId).emit('monopoly_building_bought', {
+      propertyId,
+      houses: property.houses,
+      gameState: game.getState()
+    });
+  });
+
   socket.on('leave_game', () => {
     if (currentGameId) {
       const game = activeGames.get(currentGameId);
