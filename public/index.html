@@ -141,62 +141,48 @@
 
       <div id="ludo-game" class="game-container" style="display: none;">
         <div class="ludo-board-wrapper">
-          <div class="ludo-board-realistic">
-            <div class="ludo-quadrant red-quadrant">
-              <div class="home-base red-home">
-                <div class="home-base-inner">
-                  <div class="piece-slot" data-color="red" data-index="0"></div>
-                  <div class="piece-slot" data-color="red" data-index="1"></div>
-                  <div class="piece-slot" data-color="red" data-index="2"></div>
-                  <div class="piece-slot" data-color="red" data-index="3"></div>
-                </div>
+          <div class="ludo-board-grid">
+            <div class="ludo-cell home red-home-area" data-area="red-home">
+              <div class="home-base-inner">
+                <div class="piece-slot" data-color="red" data-index="0"></div>
+                <div class="piece-slot" data-color="red" data-index="1"></div>
+                <div class="piece-slot" data-color="red" data-index="2"></div>
+                <div class="piece-slot" data-color="red" data-index="3"></div>
               </div>
             </div>
-            <div class="ludo-quadrant green-quadrant">
-              <div class="home-base green-home">
-                <div class="home-base-inner">
-                  <div class="piece-slot" data-color="green" data-index="0"></div>
-                  <div class="piece-slot" data-color="green" data-index="1"></div>
-                  <div class="piece-slot" data-color="green" data-index="2"></div>
-                  <div class="piece-slot" data-color="green" data-index="3"></div>
-                </div>
+            <div class="ludo-path-cells top-row" id="ludo-top-row"></div>
+            <div class="ludo-cell home green-home-area" data-area="green-home">
+              <div class="home-base-inner">
+                <div class="piece-slot" data-color="green" data-index="0"></div>
+                <div class="piece-slot" data-color="green" data-index="1"></div>
+                <div class="piece-slot" data-color="green" data-index="2"></div>
+                <div class="piece-slot" data-color="green" data-index="3"></div>
               </div>
             </div>
-            <div class="ludo-quadrant yellow-quadrant">
-              <div class="home-base yellow-home">
-                <div class="home-base-inner">
-                  <div class="piece-slot" data-color="yellow" data-index="0"></div>
-                  <div class="piece-slot" data-color="yellow" data-index="1"></div>
-                  <div class="piece-slot" data-color="yellow" data-index="2"></div>
-                  <div class="piece-slot" data-color="yellow" data-index="3"></div>
-                </div>
+            <div class="ludo-path-cells left-col" id="ludo-left-col"></div>
+            <div class="ludo-center">
+              <div class="center-triangle red-tri"></div>
+              <div class="center-triangle green-tri"></div>
+              <div class="center-triangle yellow-tri"></div>
+              <div class="center-triangle blue-tri"></div>
+            </div>
+            <div class="ludo-path-cells right-col" id="ludo-right-col"></div>
+            <div class="ludo-cell home yellow-home-area" data-area="yellow-home">
+              <div class="home-base-inner">
+                <div class="piece-slot" data-color="yellow" data-index="0"></div>
+                <div class="piece-slot" data-color="yellow" data-index="1"></div>
+                <div class="piece-slot" data-color="yellow" data-index="2"></div>
+                <div class="piece-slot" data-color="yellow" data-index="3"></div>
               </div>
             </div>
-            <div class="ludo-quadrant blue-quadrant">
-              <div class="home-base blue-home">
-                <div class="home-base-inner">
-                  <div class="piece-slot" data-color="blue" data-index="0"></div>
-                  <div class="piece-slot" data-color="blue" data-index="1"></div>
-                  <div class="piece-slot" data-color="blue" data-index="2"></div>
-                  <div class="piece-slot" data-color="blue" data-index="3"></div>
-                </div>
+            <div class="ludo-path-cells bottom-row" id="ludo-bottom-row"></div>
+            <div class="ludo-cell home blue-home-area" data-area="blue-home">
+              <div class="home-base-inner">
+                <div class="piece-slot" data-color="blue" data-index="0"></div>
+                <div class="piece-slot" data-color="blue" data-index="1"></div>
+                <div class="piece-slot" data-color="blue" data-index="2"></div>
+                <div class="piece-slot" data-color="blue" data-index="3"></div>
               </div>
-            </div>
-            <div class="ludo-center-home">
-              <div class="center-triangle red"></div>
-              <div class="center-triangle green"></div>
-              <div class="center-triangle yellow"></div>
-              <div class="center-triangle blue"></div>
-            </div>
-            <div class="ludo-paths">
-              <div class="path-row top-path" id="top-path"></div>
-              <div class="path-row left-path" id="left-path"></div>
-              <div class="path-row right-path" id="right-path"></div>
-              <div class="path-row bottom-path" id="bottom-path"></div>
-              <div class="home-column red-home-col" id="red-home-col"></div>
-              <div class="home-column green-home-col" id="green-home-col"></div>
-              <div class="home-column yellow-home-col" id="yellow-home-col"></div>
-              <div class="home-column blue-home-col" id="blue-home-col"></div>
             </div>
           </div>
           
@@ -248,7 +234,11 @@
         </div>
       </div>
 
-      <div id="monopoly-game" class="game-container" style="display: none;">
+      <div id="monopoly-game" class="game-container monopoly-layout" style="display: none;">
+        <div class="monopoly-deeds-panel" id="monopoly-deeds-panel">
+          <h3>My Properties</h3>
+          <div class="deeds-list" id="deeds-list"></div>
+        </div>
         <div class="monopoly-board-realistic">
           <div class="monopoly-corner corner-go">GO</div>
           <div class="monopoly-side top-side" id="monopoly-top-side"></div>
@@ -295,10 +285,6 @@
             <button id="monopoly-buy-btn" class="btn success" style="display: none;">💰 Buy Property</button>
             <button id="monopoly-pass-btn" class="btn secondary" style="display: none;">Pass</button>
           </div>
-          <div class="my-deeds-section">
-            <h4>My Properties</h4>
-            <div id="my-deeds" class="deeds-container"></div>
-          </div>
         </div>
         <div id="deed-popup" class="deed-popup" style="display: none;"></div>
       </div>
@@ -338,11 +324,33 @@
         </div>
       </div>
 
-      <div class="chat-panel">
+      <div class="chat-panel spectator-chat">
+        <div class="chat-header">
+          <span class="chat-title">Chat & Spectators</span>
+          <div class="room-status" id="room-status">
+            <span id="player-count">0 Players</span>
+            <span id="spectator-count">0 Watching</span>
+          </div>
+        </div>
+        <div id="spectator-list" class="spectator-list"></div>
         <div id="chat-messages" class="chat-messages"></div>
+        <div class="sticker-bar" id="sticker-bar">
+          <button class="sticker-btn" data-sticker="👏">👏</button>
+          <button class="sticker-btn" data-sticker="🎉">🎉</button>
+          <button class="sticker-btn" data-sticker="🔥">🔥</button>
+          <button class="sticker-btn" data-sticker="😮">😮</button>
+          <button class="sticker-btn" data-sticker="😂">😂</button>
+          <button class="sticker-btn" data-sticker="👍">👍</button>
+          <button class="sticker-btn" data-sticker="💪">💪</button>
+          <button class="sticker-btn" data-sticker="❤️">❤️</button>
+        </div>
         <div class="chat-input">
           <input type="text" id="chat-input" placeholder="Type a message...">
           <button id="send-chat-btn" class="btn">Send</button>
+        </div>
+        <div class="voice-controls" id="voice-controls">
+          <button id="voice-toggle-btn" class="btn voice-btn">🎤 Join Voice</button>
+          <div id="voice-participants" class="voice-participants"></div>
         </div>
       </div>
     </div>

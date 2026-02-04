@@ -1739,3 +1739,342 @@ body {
   0%, 100% { box-shadow: 0 0 0 0 rgba(255,215,0,0.7); }
   50% { box-shadow: 0 0 0 10px rgba(255,215,0,0); }
 }
+
+.ludo-board-grid {
+  display: grid;
+  grid-template-columns: 120px repeat(3, 26px) 26px repeat(3, 26px) 120px;
+  grid-template-rows: 120px repeat(3, 26px) 26px repeat(3, 26px) 120px;
+  width: 380px;
+  height: 380px;
+  background: #F5DEB3;
+  border: 6px solid #8B4513;
+  border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+}
+
+.ludo-cell.home {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.red-home-area { background: #FFCDD2; grid-area: 1/1/4/4; border: 4px solid #F44336; }
+.green-home-area { background: #C8E6C9; grid-area: 1/7/4/10; border: 4px solid #4CAF50; }
+.yellow-home-area { background: #FFF9C4; grid-area: 7/1/10/4; border: 4px solid #FFEB3B; }
+.blue-home-area { background: #BBDEFB; grid-area: 7/7/10/10; border: 4px solid #2196F3; }
+
+.ludo-cell.home .home-base-inner {
+  background: white;
+  width: 85%;
+  height: 85%;
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 8px;
+  box-shadow: inset 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.ludo-path-cells {
+  display: contents;
+}
+
+.ludo-path-cell {
+  width: 26px;
+  height: 26px;
+  background: white;
+  border: 1px solid #ccc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  font-size: 8px;
+}
+
+.ludo-path-cell.safe { background: #FFD700; }
+.ludo-path-cell.start-red { background: #F44336; }
+.ludo-path-cell.start-green { background: #4CAF50; }
+.ludo-path-cell.start-yellow { background: #FFEB3B; }
+.ludo-path-cell.start-blue { background: #2196F3; }
+.ludo-path-cell.home-stretch-red { background: #FFCDD2; }
+.ludo-path-cell.home-stretch-green { background: #C8E6C9; }
+.ludo-path-cell.home-stretch-yellow { background: #FFF9C4; }
+.ludo-path-cell.home-stretch-blue { background: #BBDEFB; }
+
+.ludo-path-cell .piece {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  position: absolute;
+  z-index: 10;
+}
+
+.ludo-center {
+  grid-area: 4/4/7/7;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  background: white;
+}
+
+.ludo-center .center-triangle {
+  width: 100%;
+  height: 100%;
+}
+
+.center-triangle.red-tri { background: #F44336; clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.center-triangle.green-tri { background: #4CAF50; clip-path: polygon(0 0, 100% 0, 100% 100%); transform: rotate(90deg); }
+.center-triangle.yellow-tri { background: #FFEB3B; clip-path: polygon(0 100%, 50% 0, 100% 100%); }
+.center-triangle.blue-tri { background: #2196F3; clip-path: polygon(0 0, 0 100%, 100% 100%); transform: rotate(-90deg); }
+
+.monopoly-layout {
+  display: flex;
+  gap: 15px;
+  align-items: flex-start;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.monopoly-deeds-panel {
+  background: linear-gradient(180deg, #2C3E50 0%, #1a252f 100%);
+  border-radius: 15px;
+  padding: 15px;
+  width: 200px;
+  max-height: 500px;
+  overflow-y: auto;
+  color: white;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+.monopoly-deeds-panel h3 {
+  text-align: center;
+  margin-bottom: 10px;
+  font-size: 1rem;
+  border-bottom: 2px solid #00CEC9;
+  padding-bottom: 8px;
+}
+
+.deeds-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.deed-card-mini {
+  background: white;
+  border-radius: 6px;
+  padding: 8px;
+  color: #333;
+  position: relative;
+}
+
+.deed-card-mini .deed-color-bar {
+  height: 6px;
+  border-radius: 3px 3px 0 0;
+  margin: -8px -8px 6px -8px;
+}
+
+.deed-card-mini .deed-name {
+  font-size: 0.75rem;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.deed-card-mini .deed-info {
+  font-size: 0.65rem;
+  color: #666;
+}
+
+.deed-card-mini .building-section {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.deed-card-mini .building-icons {
+  display: flex;
+  gap: 2px;
+}
+
+.deed-card-mini .building-icon {
+  font-size: 0.7rem;
+}
+
+.deed-card-mini .buy-building-btn {
+  font-size: 0.6rem;
+  padding: 2px 6px;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.deed-card-mini .buy-building-btn:hover {
+  background: #388E3C;
+}
+
+.deed-card-mini .buy-building-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.chat-panel.spectator-chat {
+  background: linear-gradient(180deg, #2C3E50 0%, #1a252f 100%);
+  border-radius: 15px;
+  padding: 10px;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.2);
+}
+
+.chat-title {
+  color: white;
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+.room-status {
+  display: flex;
+  gap: 10px;
+  font-size: 0.7rem;
+}
+
+.room-status span {
+  background: rgba(255,255,255,0.2);
+  padding: 2px 6px;
+  border-radius: 10px;
+  color: white;
+}
+
+.spectator-list {
+  max-height: 60px;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.spectator-badge {
+  background: rgba(255,255,255,0.15);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.spectator-badge::before {
+  content: '👁';
+  font-size: 0.6rem;
+}
+
+.sticker-bar {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  padding: 6px 0;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.sticker-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,0.1);
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s;
+}
+
+.sticker-btn:hover {
+  background: rgba(255,255,255,0.3);
+  transform: scale(1.2);
+}
+
+.voice-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+.voice-btn {
+  background: #00CEC9;
+  color: white;
+  border: none;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.voice-btn.active {
+  background: #FF7675;
+}
+
+.voice-btn.active::before {
+  content: '🔴 ';
+}
+
+.voice-participants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.voice-participant {
+  background: rgba(0,206,201,0.3);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.voice-participant.speaking {
+  animation: speaking-pulse 0.5s infinite;
+}
+
+@keyframes speaking-pulse {
+  0%, 100% { background: rgba(0,206,201,0.3); }
+  50% { background: rgba(0,206,201,0.6); }
+}
+
+.sticker-float {
+  position: fixed;
+  font-size: 3rem;
+  animation: sticker-float 2s ease-out forwards;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+@keyframes sticker-float {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-100px) scale(1.5); }
+}
+
+.chat-message.sticker {
+  font-size: 2rem;
+  text-align: center;
+  padding: 5px;
+}
